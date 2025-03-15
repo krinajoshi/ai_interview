@@ -13,7 +13,8 @@ import {
 import { useAppDispatch, useAppSelector } from '../../store';
 import { loginStart, loginSuccess, loginFailure } from '../../features/auth/authSlice';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8001';
+// Use the same API_URL as registration
+const API_URL = 'http://localhost:8001';
 
 const Login: React.FC = () => {
   const { t } = useTranslation();
@@ -29,6 +30,20 @@ const Login: React.FC = () => {
     dispatch(loginStart());
 
     try {
+      console.log('Attempting to login with:', API_URL);
+      
+      // First check if the server is available
+      try {
+        const healthCheck = await fetch(`${API_URL}/health`);
+        if (!healthCheck.ok) {
+          throw new Error('Server is not responding properly');
+        }
+      } catch (healthError) {
+        console.error('Health check failed:', healthError);
+        throw new Error('Unable to connect to the server. Please try again later.');
+      }
+
+      // Proceed with login
       const response = await fetch(`${API_URL}/api/v1/auth/login`, {
         method: 'POST',
         headers: {
@@ -39,11 +54,22 @@ const Login: React.FC = () => {
         body: JSON.stringify({ email, password }),
       });
 
-      const data = await response.json();
-      console.log('Login response:', data);
+      console.log('Login response status:', response.status);
+      console.log('Login response headers:', Object.fromEntries(response.headers.entries()));
+      
+      let data;
+      try {
+        const textResponse = await response.text();
+        console.log('Raw response:', textResponse);
+        data = JSON.parse(textResponse);
+        console.log('Parsed login data:', data);
+      } catch (jsonError) {
+        console.error('Error parsing response:', jsonError);
+        throw new Error('Invalid response from server');
+      }
 
       if (!response.ok) {
-        throw new Error(data.message || 'Invalid credentials');
+        throw new Error(data.message || `Login failed with status: ${response.status}`);
       }
 
       if (data.status === 'success' && data.user) {
@@ -53,6 +79,7 @@ const Login: React.FC = () => {
         throw new Error('Invalid response format from server');
       }
     } catch (error) {
+      console.error('Login error:', error);
       dispatch(loginFailure(error instanceof Error ? error.message : 'Login failed'));
     }
   };

@@ -46,7 +46,7 @@ const Dashboard: React.FC = () => {
                 onClick={() => navigate('/interview')}
                 sx={{ mt: 2 }}
               >
-                {t('interview.start')}
+                {t('Start Interview')}
               </Button>
             </Paper>
           </Grid>
