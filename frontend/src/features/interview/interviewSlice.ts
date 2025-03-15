@@ -1,4 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { Language } from '../../components/LanguageSelector';
 
 interface Answer {
   text: string;
@@ -13,9 +14,17 @@ interface Answer {
 
 interface Question {
   id: string;
-  text: string;
+  text: {
+    en: string;
+    fr: string;
+    ar: string;
+  };
   type: string;
-  context?: string;
+  context?: {
+    en: string;
+    fr: string;
+    ar: string;
+  };
 }
 
 interface InterviewState {
@@ -29,6 +38,7 @@ interface InterviewState {
   error: string | null;
   isInterviewStarted: boolean;
   isInterviewComplete: boolean;
+  selectedLanguage: Language;
 }
 
 const initialState: InterviewState = {
@@ -42,6 +52,7 @@ const initialState: InterviewState = {
   error: null,
   isInterviewStarted: false,
   isInterviewComplete: false,
+  selectedLanguage: 'en',
 };
 
 interface SetAnswerPayload {
@@ -65,6 +76,9 @@ const interviewSlice = createSlice({
     setQuestions: (state, action: PayloadAction<Question[]>) => {
       state.questions = action.payload;
     },
+    setLanguage: (state, action: PayloadAction<Language>) => {
+      state.selectedLanguage = action.payload;
+    },
     startInterview: (state) => {
       state.isInterviewStarted = true;
       state.isInterviewComplete = false;
@@ -87,7 +101,6 @@ const interviewSlice = createSlice({
       }
     },
     completeInterview: (state) => {
-      // Save the final answer first
       state.isInterviewComplete = true;
       state.isInterviewStarted = false;
     },
@@ -106,6 +119,7 @@ export const {
   setResume,
   setJobDescription,
   setQuestions,
+  setLanguage,
   startInterview,
   setAnswer,
   nextQuestion,

@@ -23,9 +23,11 @@ import {
   previousQuestion,
   completeInterview,
   resetInterview,
+  setLanguage,
 } from '../../features/interview/interviewSlice';
 import InterviewSetup from './Setup';
 import MediaRecorder from '../../components/MediaRecorder';
+import LanguageSelector, { Language } from '../../components/LanguageSelector';
 
 interface Answer {
   text: string;
@@ -38,26 +40,56 @@ interface Answer {
   };
 }
 
-const analyzeAnswer = (answer: Answer, questionText: string): Answer['feedback'] => {
-  // This is a placeholder for the analysis logic
-  // In a production environment, this would call an AI service
-  const score = Math.random() * 5; // Mock score between 0-5
-  const comments = [
-    'Good use of specific examples',
-    'Clear communication style',
-    answer.mediaType ? 'Effective use of ' + answer.mediaType + ' response' : '',
-  ].filter(Boolean);
+const getLanguageSpecificFeedback = (answer: Answer, questionText: string, language: Language): Answer['feedback'] => {
+  // This is a placeholder for the language-specific analysis logic
+  // In a production environment, this would call an AI service with language support
   
-  const suggestions = [
-    'Consider providing more context',
-    'Try to be more concise',
-    'Include specific metrics if available',
-  ];
+  const feedbackByLanguage = {
+    en: {
+      comments: [
+        'Good use of specific examples',
+        'Clear communication style',
+        answer.mediaType ? 'Effective use of ' + answer.mediaType + ' response' : '',
+      ],
+      suggestions: [
+        'Consider providing more context',
+        'Try to be more concise',
+        'Include specific metrics if available',
+      ],
+    },
+    fr: {
+      comments: [
+        'Bonne utilisation d\'exemples spécifiques',
+        'Style de communication clair',
+        answer.mediaType ? 'Utilisation efficace de la réponse ' + (answer.mediaType === 'video' ? 'vidéo' : 'audio') : '',
+      ],
+      suggestions: [
+        'Pensez à fournir plus de contexte',
+        'Essayez d\'être plus concis',
+        'Incluez des métriques spécifiques si possible',
+      ],
+    },
+    ar: {
+      comments: [
+        'استخدام جيد للأمثلة المحددة',
+        'أسلوب تواصل واضح',
+        answer.mediaType ? 'استخدام فعال للرد ' + (answer.mediaType === 'video' ? 'المرئي' : 'الصوتي') : '',
+      ],
+      suggestions: [
+        'حاول تقديم المزيد من السياق',
+        'حاول أن تكون أكثر إيجازاً',
+        'قم بتضمين مقاييس محددة إذا كانت متوفرة',
+      ],
+    },
+  };
+
+  const score = Math.random() * 5; // Mock score between 0-5
+  const feedback = feedbackByLanguage[language];
 
   return {
     score,
-    comments,
-    suggestions,
+    comments: feedback.comments.filter(Boolean),
+    suggestions: feedback.suggestions,
   };
 };
 
@@ -74,6 +106,7 @@ const Interview: React.FC = () => {
     isInterviewStarted,
     isInterviewComplete,
     jobTitle,
+    selectedLanguage,
   } = useAppSelector((state) => state.interview);
 
   const [currentAnswer, setCurrentAnswer] = React.useState<Answer>({ text: '' });
@@ -94,6 +127,10 @@ const Interview: React.FC = () => {
       setCurrentAnswer(answers[currentQuestionId] || { text: '' });
     }
   }, [currentQuestionIndex, questions, answers, isInterviewStarted]);
+
+  const handleLanguageChange = (lang: Language) => {
+    dispatch(setLanguage(lang));
+  };
 
   const handleBack = () => {
     dispatch(resetInterview());
@@ -149,8 +186,13 @@ const Interview: React.FC = () => {
   const handleNext = async () => {
     const currentQuestion = questions[currentQuestionIndex];
     
-    // Analyze the answer before saving
-    const feedback = analyzeAnswer(currentAnswer, currentQuestion.text);
+    // Analyze the answer with language-specific feedback
+    const feedback = getLanguageSpecificFeedback(
+      currentAnswer, 
+      currentQuestion.text[selectedLanguage],
+      selectedLanguage
+    );
+    
     const answerWithFeedback = {
       ...currentAnswer,
       feedback
@@ -174,6 +216,7 @@ const Interview: React.FC = () => {
           [currentQuestion.id]: answerWithFeedback // Include the last answer
         },
         completedAt: new Date().toISOString(),
+        language: selectedLanguage,
       };
       const pastInterviews = JSON.parse(localStorage.getItem('pastInterviews') || '[]');
       pastInterviews.push(interviewData);
@@ -204,17 +247,25 @@ const Interview: React.FC = () => {
         <Box sx={{ py: 4 }}>
           <Paper sx={{ p: 3 }}>
             <Typography variant="h5" gutterBottom>
-              Interview Complete!
+              {selectedLanguage === 'fr' ? 'Entretien terminé !' : 
+               selectedLanguage === 'ar' ? '!تم الانتهاء من المقابلة' : 
+               'Interview Complete!'}
             </Typography>
             <Typography paragraph>
-              Thank you for completing the interview. Your responses have been recorded and analyzed.
+              {selectedLanguage === 'fr' ? 
+                'Merci d\'avoir terminé l\'entretien. Vos réponses ont été enregistrées et analysées.' :
+               selectedLanguage === 'ar' ?
+                '.شكراً لإكمال المقابلة. تم تسجيل إجاباتك وتحليلها' :
+                'Thank you for completing the interview. Your responses have been recorded and analyzed.'}
             </Typography>
             <Box sx={{ mt: 3, display: 'flex', gap: 2, justifyContent: 'center' }}>
               <Button
                 variant="contained"
                 onClick={handleSaveAndReturn}
               >
-                Save and Return to Dashboard
+                {selectedLanguage === 'fr' ? 'Retourner au tableau de bord' :
+                 selectedLanguage === 'ar' ? 'العودة إلى لوحة التحكم' :
+                 'Return to Dashboard'}
               </Button>
             </Box>
           </Paper>
@@ -229,23 +280,32 @@ const Interview: React.FC = () => {
   return (
     <Container maxWidth="lg">
       <Box sx={{ py: 4 }}>
-        <Typography variant="h4" gutterBottom>
-          {t('Interview Questions')}
+        <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          {selectedLanguage === 'fr' ? 'Questions d\'entretien' :
+           selectedLanguage === 'ar' ? 'أسئلة المقابلة' :
+           'Interview Questions'}
+          <Box sx={{ minWidth: 200 }}>
+            <LanguageSelector value={selectedLanguage} onChange={handleLanguageChange} />
+          </Box>
         </Typography>
 
         <Stepper activeStep={currentQuestionIndex} sx={{ mb: 4 }}>
           {questions.map((_, index) => (
             <Step key={index}>
-              <StepLabel>Question {index + 1}</StepLabel>
+              <StepLabel>
+                {selectedLanguage === 'fr' ? `Question ${index + 1}` :
+                 selectedLanguage === 'ar' ? `${index + 1} السؤال` :
+                 `Question ${index + 1}`}
+              </StepLabel>
             </Step>
           ))}
         </Stepper>
 
-        <Paper sx={{ p: 3 }}>
+        <Paper sx={{ p: 3, direction: selectedLanguage === 'ar' ? 'rtl' : 'ltr' }}>
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
           <Typography variant="h6" gutterBottom>
-            {currentQuestion?.text}
+            {currentQuestion?.text[selectedLanguage]}
           </Typography>
 
           {currentQuestion?.context && (
@@ -254,13 +314,18 @@ const Interview: React.FC = () => {
               color="text.secondary"
               sx={{ mb: 2, fontStyle: 'italic' }}
             >
-              Context: {currentQuestion.context}
+              {selectedLanguage === 'fr' ? 'Contexte: ' :
+               selectedLanguage === 'ar' ? 'السياق: ' :
+               'Context: '}
+              {currentQuestion.context[selectedLanguage]}
             </Typography>
           )}
 
           <Box sx={{ mt: 3 }}>
             <Typography variant="subtitle1" gutterBottom>
-              Answer with text, audio, or video:
+              {selectedLanguage === 'fr' ? 'Répondez avec du texte, de l\'audio ou de la vidéo:' :
+               selectedLanguage === 'ar' ? ':أجب بالنص أو الصوت أو الفيديو' :
+               'Answer with text, audio, or video:'}
             </Typography>
             
             <TextField
@@ -269,8 +334,15 @@ const Interview: React.FC = () => {
               rows={6}
               value={currentAnswer.text}
               onChange={(e) => setCurrentAnswer(prev => ({ ...prev, text: e.target.value }))}
-              placeholder="Type your answer here..."
+              placeholder={
+                selectedLanguage === 'fr' ? 'Tapez votre réponse ici...' :
+                selectedLanguage === 'ar' ? '...اكتب إجابتك هنا' :
+                'Type your answer here...'
+              }
               sx={{ mb: 2 }}
+              InputProps={{
+                style: { textAlign: selectedLanguage === 'ar' ? 'right' : 'left' }
+              }}
             />
 
             <MediaRecorder 
@@ -288,14 +360,21 @@ const Interview: React.FC = () => {
               <Card sx={{ mt: 3, bgcolor: 'grey.50' }}>
                 <CardContent>
                   <Typography variant="h6" gutterBottom>
-                    Answer Analysis
+                    {selectedLanguage === 'fr' ? 'Analyse de la réponse' :
+                     selectedLanguage === 'ar' ? 'تحليل الإجابة' :
+                     'Answer Analysis'}
                   </Typography>
                   <Typography variant="body1" gutterBottom>
-                    Score: {feedback.score.toFixed(1)} / 5
+                    {selectedLanguage === 'fr' ? 'Score: ' :
+                     selectedLanguage === 'ar' ? 'النتيجة: ' :
+                     'Score: '}
+                    {feedback.score.toFixed(1)} / 5
                   </Typography>
                   
                   <Typography variant="subtitle1" sx={{ mt: 2 }}>
-                    Positive Points:
+                    {selectedLanguage === 'fr' ? 'Points positifs:' :
+                     selectedLanguage === 'ar' ? ':النقاط الإيجابية' :
+                     'Positive Points:'}
                   </Typography>
                   <ul>
                     {feedback.comments.map((comment, index) => (
@@ -304,7 +383,9 @@ const Interview: React.FC = () => {
                   </ul>
 
                   <Typography variant="subtitle1" sx={{ mt: 2 }}>
-                    Suggestions for Improvement:
+                    {selectedLanguage === 'fr' ? 'Suggestions d\'amélioration:' :
+                     selectedLanguage === 'ar' ? ':اقتراحات للتحسين' :
+                     'Suggestions for Improvement:'}
                   </Typography>
                   <ul>
                     {feedback.suggestions.map((suggestion, index) => (
@@ -322,7 +403,9 @@ const Interview: React.FC = () => {
               onClick={handlePrevious}
               disabled={currentQuestionIndex === 0 || loading}
             >
-              {t('Previous Question')}
+              {selectedLanguage === 'fr' ? 'Question précédente' :
+               selectedLanguage === 'ar' ? 'السؤال السابق' :
+               'Previous Question'}
             </Button>
             <Button
               variant="contained"
@@ -330,9 +413,13 @@ const Interview: React.FC = () => {
               disabled={!currentAnswer.text.trim() && !currentAnswer.mediaUrl || loading}
               endIcon={loading && <CircularProgress size={20} />}
             >
-              {currentQuestionIndex === questions.length - 1
-                ? t('Complete Interview')
-                : t('Next Question')}
+              {currentQuestionIndex === questions.length - 1 ?
+                (selectedLanguage === 'fr' ? 'Terminer l\'entretien' :
+                 selectedLanguage === 'ar' ? 'إنهاء المقابلة' :
+                 'Complete Interview') :
+                (selectedLanguage === 'fr' ? 'Question suivante' :
+                 selectedLanguage === 'ar' ? 'السؤال التالي' :
+                 'Next Question')}
             </Button>
           </Box>
         </Paper>
