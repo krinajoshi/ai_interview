@@ -13,6 +13,8 @@ import {
 import { useAppDispatch, useAppSelector } from '../../store';
 import { loginStart, loginSuccess, loginFailure } from '../../features/auth/authSlice';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8001';
+
 const Login: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -27,22 +29,29 @@ const Login: React.FC = () => {
     dispatch(loginStart());
 
     try {
-      // TODO: Implement actual API call
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(`${API_URL}/api/v1/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({ email, password }),
       });
 
+      const data = await response.json();
+      console.log('Login response:', data);
+
       if (!response.ok) {
-        throw new Error('Invalid credentials');
+        throw new Error(data.message || 'Invalid credentials');
       }
 
-      const data = await response.json();
-      dispatch(loginSuccess(data.user));
-      navigate('/dashboard');
+      if (data.status === 'success' && data.user) {
+        dispatch(loginSuccess(data.user));
+        navigate('/dashboard');
+      } else {
+        throw new Error('Invalid response format from server');
+      }
     } catch (error) {
       dispatch(loginFailure(error instanceof Error ? error.message : 'Login failed'));
     }
