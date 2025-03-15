@@ -1,17 +1,17 @@
 import { configureStore } from '@reduxjs/toolkit';
 import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';
 import authReducer from './features/auth/authSlice';
+import interviewReducer from './features/interview/interviewSlice';
 
 // Reducers will be imported here
 // import userReducer from './features/user/userSlice';
-// import interviewReducer from './features/interview/interviewSlice';
 
 export const store = configureStore({
   reducer: {
     auth: authReducer,
+    interview: interviewReducer,
     // Add reducers here
     // user: userReducer,
-    // interview: interviewReducer,
   },
 });
 

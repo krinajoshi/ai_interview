@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Container,
@@ -10,21 +10,46 @@ import {
   Card,
   CardContent,
   CardActions,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  List,
+  ListItem,
+  ListItemText,
+  Divider,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { useAppSelector } from '../../store';
+
+interface Interview {
+  jobTitle: string;
+  questions: Array<{ id: string; text: string; type: string }>;
+  answers: Record<string, string>;
+  completedAt: string;
+}
 
 const Dashboard: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const user = useAppSelector((state) => state.auth.user);
+  const [pastInterviews, setPastInterviews] = useState<Interview[]>([]);
+  const [selectedInterview, setSelectedInterview] = useState<Interview | null>(null);
 
-  // Mock data for recent interviews
-  const recentInterviews = [
-    { id: 1, title: 'Frontend Developer Interview', date: '2024-03-20', score: 85 },
-    { id: 2, title: 'Backend Developer Interview', date: '2024-03-18', score: 92 },
-    { id: 3, title: 'Full Stack Developer Interview', date: '2024-03-15', score: 78 },
-  ];
+  useEffect(() => {
+    const stored = localStorage.getItem('pastInterviews');
+    if (stored) {
+      setPastInterviews(JSON.parse(stored));
+    }
+  }, []);
+
+  const handleViewResponses = (interview: Interview) => {
+    setSelectedInterview(interview);
+  };
+
+  const handleCloseDialog = () => {
+    setSelectedInterview(null);
+  };
 
   return (
     <Container maxWidth="lg">
@@ -51,29 +76,32 @@ const Dashboard: React.FC = () => {
             </Paper>
           </Grid>
 
-          {/* Recent Interviews */}
+          {/* Past Interviews */}
           <Grid item xs={12}>
             <Typography variant="h6" gutterBottom>
-              Recent Interviews
+              Past Interviews
             </Typography>
             <Grid container spacing={2}>
-              {recentInterviews.map((interview) => (
-                <Grid item xs={12} md={4} key={interview.id}>
+              {pastInterviews.map((interview, index) => (
+                <Grid item xs={12} md={4} key={index}>
                   <Card>
                     <CardContent>
                       <Typography variant="h6" gutterBottom>
-                        {interview.title}
+                        {interview.jobTitle}
                       </Typography>
                       <Typography color="text.secondary">
-                        Date: {interview.date}
+                        Date: {new Date(interview.completedAt).toLocaleDateString()}
                       </Typography>
                       <Typography color="text.secondary">
-                        Score: {interview.score}%
+                        Questions: {interview.questions.length}
                       </Typography>
                     </CardContent>
                     <CardActions>
-                      <Button size="small" onClick={() => navigate(`/interview/${interview.id}`)}>
-                        View Details
+                      <Button 
+                        size="small" 
+                        onClick={() => handleViewResponses(interview)}
+                      >
+                        View Responses
                       </Button>
                     </CardActions>
                   </Card>
@@ -81,33 +109,46 @@ const Dashboard: React.FC = () => {
               ))}
             </Grid>
           </Grid>
-
-          {/* Quick Stats */}
-          <Grid item xs={12} md={4}>
-            <Paper sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>
-                Total Interviews
-              </Typography>
-              <Typography variant="h4">15</Typography>
-            </Paper>
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <Paper sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>
-                Average Score
-              </Typography>
-              <Typography variant="h4">85%</Typography>
-            </Paper>
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <Paper sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>
-                Skills Assessed
-              </Typography>
-              <Typography variant="h4">8</Typography>
-            </Paper>
-          </Grid>
         </Grid>
+
+        {/* Interview Responses Dialog */}
+        <Dialog
+          open={!!selectedInterview}
+          onClose={handleCloseDialog}
+          maxWidth="md"
+          fullWidth
+        >
+          <DialogTitle>
+            Interview Responses - {selectedInterview?.jobTitle}
+          </DialogTitle>
+          <DialogContent>
+            <List>
+              {selectedInterview?.questions.map((question, index) => (
+                <React.Fragment key={question.id}>
+                  <ListItem>
+                    <ListItemText
+                      primary={`Q${index + 1}: ${question.text}`}
+                      secondary={
+                        <Typography
+                          component="div"
+                          variant="body2"
+                          color="text.primary"
+                          sx={{ mt: 1, whiteSpace: 'pre-wrap' }}
+                        >
+                          {selectedInterview.answers[question.id] || 'No answer provided'}
+                        </Typography>
+                      }
+                    />
+                  </ListItem>
+                  {index < selectedInterview.questions.length - 1 && <Divider />}
+                </React.Fragment>
+              ))}
+            </List>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseDialog}>Close</Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </Container>
   );

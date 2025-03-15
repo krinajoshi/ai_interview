@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import {
   Container,
   Box,
@@ -11,49 +12,147 @@ import {
   Stepper,
   Step,
   StepLabel,
+  Alert,
 } from '@mui/material';
+import { useAppDispatch, useAppSelector } from '../../store';
+import {
+  setAnswer,
+  nextQuestion,
+  previousQuestion,
+  completeInterview,
+  resetInterview,
+} from '../../features/interview/interviewSlice';
+import InterviewSetup from './Setup';
 
 const Interview: React.FC = () => {
   const { t } = useTranslation();
-  const [activeStep, setActiveStep] = React.useState(0);
-  const [answer, setAnswer] = React.useState('');
-  const [loading, setLoading] = React.useState(false);
+  const navigate = useNavigate();
+  const dispatch = useAppDispatch();
+  const {
+    questions,
+    currentQuestionIndex,
+    answers,
+    loading,
+    error,
+    isInterviewStarted,
+    isInterviewComplete,
+    jobTitle,
+  } = useAppSelector((state) => state.interview);
 
-  // Mock interview questions
-  const questions = [
-    'Tell me about yourself and your experience.',
-    'What are your strengths and weaknesses?',
-    'Where do you see yourself in 5 years?',
-    'Why do you want to work for our company?',
-    'Describe a challenging situation you faced at work.',
-  ];
+  const [currentAnswer, setCurrentAnswer] = React.useState('');
+
+  // Debug logging
+  React.useEffect(() => {
+    console.log('Interview state:', {
+      questions,
+      currentQuestionIndex,
+      isInterviewStarted,
+      isInterviewComplete,
+    });
+  }, [questions, currentQuestionIndex, isInterviewStarted, isInterviewComplete]);
+
+  React.useEffect(() => {
+    if (isInterviewStarted && questions.length > 0) {
+      const currentQuestionId = questions[currentQuestionIndex]?.id;
+      setCurrentAnswer(answers[currentQuestionId] || '');
+    }
+  }, [currentQuestionIndex, questions, answers, isInterviewStarted]);
+
+  const handleBack = () => {
+    dispatch(resetInterview());
+    navigate('/dashboard');
+  };
+
+  if (!isInterviewStarted) {
+    return <InterviewSetup />;
+  }
+
+  if (questions.length === 0) {
+    return (
+      <Container maxWidth="md">
+        <Box sx={{ py: 4 }}>
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="h5" gutterBottom>
+              Loading Questions...
+            </Typography>
+            <CircularProgress />
+            <Button
+              variant="outlined"
+              onClick={handleBack}
+              sx={{ mt: 2, display: 'block' }}
+            >
+              Back to Dashboard
+            </Button>
+          </Paper>
+        </Box>
+      </Container>
+    );
+  }
 
   const handleNext = async () => {
-    setLoading(true);
-    // TODO: Implement API call to analyze answer
-    await new Promise((resolve) => setTimeout(resolve, 1500)); // Simulate API call
-    setLoading(false);
-    
-    if (activeStep < questions.length - 1) {
-      setActiveStep((prev) => prev + 1);
-      setAnswer('');
+    const currentQuestion = questions[currentQuestionIndex];
+    dispatch(setAnswer({ questionId: currentQuestion.id, answer: currentAnswer }));
+
+    if (currentQuestionIndex < questions.length - 1) {
+      dispatch(nextQuestion());
+    } else {
+      dispatch(completeInterview());
     }
   };
 
   const handlePrevious = () => {
-    if (activeStep > 0) {
-      setActiveStep((prev) => prev - 1);
-    }
+    const currentQuestion = questions[currentQuestionIndex];
+    dispatch(setAnswer({ questionId: currentQuestion.id, answer: currentAnswer }));
+    dispatch(previousQuestion());
   };
+
+  const handleSaveAndReturn = () => {
+    const interviewData = {
+      jobTitle,
+      questions,
+      answers,
+      completedAt: new Date().toISOString(),
+    };
+    const pastInterviews = JSON.parse(localStorage.getItem('pastInterviews') || '[]');
+    pastInterviews.push(interviewData);
+    localStorage.setItem('pastInterviews', JSON.stringify(pastInterviews));
+    dispatch(resetInterview());
+    navigate('/dashboard');
+  };
+
+  if (isInterviewComplete) {
+    return (
+      <Container maxWidth="md">
+        <Box sx={{ py: 4 }}>
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="h5" gutterBottom>
+              Interview Complete!
+            </Typography>
+            <Typography paragraph>
+              Thank you for completing the interview. Your responses have been recorded.
+            </Typography>
+            <Box sx={{ mt: 3, display: 'flex', gap: 2, justifyContent: 'center' }}>
+              <Button
+                variant="contained"
+                onClick={handleSaveAndReturn}
+              >
+                Save and Return to Dashboard
+              </Button>
+            </Box>
+          </Paper>
+        </Box>
+      </Container>
+    );
+  }
 
   return (
     <Container maxWidth="lg">
       <Box sx={{ py: 4 }}>
         <Typography variant="h4" gutterBottom>
-          {t('Start Interview')}
+          {t('Interview Questions')}
         </Typography>
 
-        <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
+        <Stepper activeStep={currentQuestionIndex} sx={{ mb: 4 }}>
           {questions.map((_, index) => (
             <Step key={index}>
               <StepLabel>Question {index + 1}</StepLabel>
@@ -62,16 +161,28 @@ const Interview: React.FC = () => {
         </Stepper>
 
         <Paper sx={{ p: 3 }}>
+          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
           <Typography variant="h6" gutterBottom>
-            {questions[activeStep]}
+            {questions[currentQuestionIndex]?.text}
           </Typography>
+
+          {questions[currentQuestionIndex]?.context && (
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ mb: 2, fontStyle: 'italic' }}
+            >
+              Context: {questions[currentQuestionIndex].context}
+            </Typography>
+          )}
 
           <TextField
             fullWidth
             multiline
             rows={6}
-            value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
+            value={currentAnswer}
+            onChange={(e) => setCurrentAnswer(e.target.value)}
             placeholder="Type your answer here..."
             sx={{ mt: 2 }}
           />
@@ -80,18 +191,18 @@ const Interview: React.FC = () => {
             <Button
               variant="outlined"
               onClick={handlePrevious}
-              disabled={activeStep === 0 || loading}
+              disabled={currentQuestionIndex === 0 || loading}
             >
               {t('Previous Question')}
             </Button>
             <Button
               variant="contained"
               onClick={handleNext}
-              disabled={!answer.trim() || loading}
+              disabled={!currentAnswer.trim() || loading}
               endIcon={loading && <CircularProgress size={20} />}
             >
-              {activeStep === questions.length - 1
-                ? t('End Interview')
+              {currentQuestionIndex === questions.length - 1
+                ? t('Complete Interview')
                 : t('Next Question')}
             </Button>
           </Box>
