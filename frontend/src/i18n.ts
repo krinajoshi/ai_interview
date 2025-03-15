@@ -11,7 +11,13 @@ i18n
   .init({
     resources: {
       en: {
-        translation: enTranslations,
+        translation: {
+          common: {
+            welcome: 'Welcome to AI Interview Platform',
+            login: 'Login',
+            register: 'Register',
+          },
+        },
       },
       fr: {
         translation: frTranslations,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import * as React from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Container,
@@ -15,9 +15,9 @@ import {
 
 const Interview: React.FC = () => {
   const { t } = useTranslation();
-  const [activeStep, setActiveStep] = useState(0);
-  const [answer, setAnswer] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [activeStep, setActiveStep] = React.useState(0);
+  const [answer, setAnswer] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
 
   // Mock interview questions
   const questions = [
