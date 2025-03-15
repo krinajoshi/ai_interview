@@ -1,5 +1,16 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
+interface Answer {
+  text: string;
+  mediaUrl?: string;
+  mediaType?: 'audio' | 'video';
+  feedback?: {
+    score: number;
+    comments: string[];
+    suggestions: string[];
+  };
+}
+
 interface Question {
   id: string;
   text: string;
@@ -13,7 +24,7 @@ interface InterviewState {
   jobDescription: string | null;
   questions: Question[];
   currentQuestionIndex: number;
-  answers: Record<string, string>;
+  answers: Record<string, Answer>;
   loading: boolean;
   error: string | null;
   isInterviewStarted: boolean;
@@ -33,6 +44,11 @@ const initialState: InterviewState = {
   isInterviewComplete: false,
 };
 
+interface SetAnswerPayload {
+  questionId: string;
+  answer: Answer;
+}
+
 const interviewSlice = createSlice({
   name: 'interview',
   initialState,
@@ -48,17 +64,17 @@ const interviewSlice = createSlice({
     },
     setQuestions: (state, action: PayloadAction<Question[]>) => {
       state.questions = action.payload;
-      state.currentQuestionIndex = 0;
-      state.answers = {};
     },
     startInterview: (state) => {
       state.isInterviewStarted = true;
       state.isInterviewComplete = false;
       state.currentQuestionIndex = 0;
       state.answers = {};
+      state.error = null;
     },
-    setAnswer: (state, action: PayloadAction<{ questionId: string; answer: string }>) => {
-      state.answers[action.payload.questionId] = action.payload.answer;
+    setAnswer: (state, action: PayloadAction<SetAnswerPayload>) => {
+      const { questionId, answer } = action.payload;
+      state.answers[questionId] = answer;
     },
     nextQuestion: (state) => {
       if (state.currentQuestionIndex < state.questions.length - 1) {
@@ -71,7 +87,9 @@ const interviewSlice = createSlice({
       }
     },
     completeInterview: (state) => {
+      // Save the final answer first
       state.isInterviewComplete = true;
+      state.isInterviewStarted = false;
     },
     resetInterview: () => initialState,
     setLoading: (state, action: PayloadAction<boolean>) => {
