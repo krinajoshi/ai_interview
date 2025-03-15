@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import * as React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -10,17 +10,20 @@ import {
   Link,
   Alert,
 } from '@mui/material';
-import { useAppDispatch, useAppSelector } from '../../store';
+import { useAppDispatch } from '../../store';
 import { loginSuccess } from '../../features/auth/authSlice';
+
+// Ensure we have a valid API URL
+const API_URL = 'http://localhost:8001';
 
 const Register: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(false);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = React.useState({
     email: '',
     password: '',
     confirmPassword: '',
@@ -40,18 +43,33 @@ const Register: React.FC = () => {
     setLoading(true);
 
     if (formData.password !== formData.confirmPassword) {
-      setError(t('auth.passwordsDoNotMatch'));
+      setError('Passwords do not match');
       setLoading(false);
       return;
     }
 
     try {
-      // TODO: Implement actual API call
-      const response = await fetch('/api/auth/register', {
+      console.log('Attempting to register with:', API_URL);
+      
+      // First check if the server is available
+      try {
+        const healthCheck = await fetch(`${API_URL}/health`);
+        if (!healthCheck.ok) {
+          throw new Error('Server is not responding properly');
+        }
+      } catch (healthError) {
+        console.error('Health check failed:', healthError);
+        throw new Error('Unable to connect to the server. Please try again later.');
+      }
+
+      // Proceed with registration
+      const response = await fetch(`${API_URL}/api/v1/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
           email: formData.email,
           password: formData.password,
@@ -59,15 +77,37 @@ const Register: React.FC = () => {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error('Registration failed');
+      console.log('Registration response status:', response.status);
+      console.log('Registration response headers:', Object.fromEntries(response.headers.entries()));
+      
+      let data;
+      try {
+        const textResponse = await response.text();
+        console.log('Raw response:', textResponse);
+        data = JSON.parse(textResponse);
+        console.log('Parsed registration data:', data);
+      } catch (jsonError) {
+        console.error('Error parsing response:', jsonError);
+        throw new Error('Invalid response from server');
       }
 
-      const data = await response.json();
-      dispatch(loginSuccess(data.user));
-      navigate('/dashboard');
+      if (!response.ok) {
+        throw new Error(data.message || `Registration failed with status: ${response.status}`);
+      }
+
+      if (data.status === 'success' && data.user) {
+        dispatch(loginSuccess(data.user));
+        navigate('/dashboard');
+      } else {
+        throw new Error('Invalid response format from server');
+      }
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Registration failed');
+      console.error('Registration error:', error);
+      setError(
+        error instanceof Error 
+          ? error.message 
+          : 'Registration failed. Please check your connection and try again.'
+      );
     } finally {
       setLoading(false);
     }
@@ -84,7 +124,7 @@ const Register: React.FC = () => {
         }}
       >
         <Typography component="h1" variant="h5">
-          {t('common.register')}
+          Create Account
         </Typography>
         <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -99,41 +139,45 @@ const Register: React.FC = () => {
             autoFocus
             value={formData.fullName}
             onChange={handleChange}
+            placeholder="Enter your full name"
           />
           <TextField
             margin="normal"
             required
             fullWidth
             id="email"
-            label={t('auth.email')}
+            label="Email Address"
             name="email"
             autoComplete="email"
             value={formData.email}
             onChange={handleChange}
+            placeholder="Enter your email address"
           />
           <TextField
             margin="normal"
             required
             fullWidth
             name="password"
-            label={t('auth.password')}
+            label="Password"
             type="password"
             id="password"
             autoComplete="new-password"
             value={formData.password}
             onChange={handleChange}
+            placeholder="Enter your password"
           />
           <TextField
             margin="normal"
             required
             fullWidth
             name="confirmPassword"
-            label={t('auth.confirmPassword')}
+            label="Confirm Password"
             type="password"
             id="confirmPassword"
             autoComplete="new-password"
             value={formData.confirmPassword}
             onChange={handleChange}
+            placeholder="Confirm your password"
           />
           <Button
             type="submit"
@@ -142,11 +186,15 @@ const Register: React.FC = () => {
             sx={{ mt: 3, mb: 2 }}
             disabled={loading}
           >
-            {loading ? 'Loading...' : t('common.register')}
+            {loading ? 'Creating Account...' : 'Create Account'}
           </Button>
           <Box sx={{ textAlign: 'center' }}>
-            <Link href="#" variant="body2" onClick={() => navigate('/login')}>
-              {t('auth.haveAccount')}
+            <Link 
+              component="button"
+              variant="body2" 
+              onClick={() => navigate('/login')}
+            >
+              Already have an account? Sign in
             </Link>
           </Box>
         </Box>
