@@ -50,7 +50,7 @@ const Interview: React.FC = () => {
     <Container maxWidth="lg">
       <Box sx={{ py: 4 }}>
         <Typography variant="h4" gutterBottom>
-          {t('interview.start')}
+          {t('Start Interview')}
         </Typography>
 
         <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
@@ -82,7 +82,7 @@ const Interview: React.FC = () => {
               onClick={handlePrevious}
               disabled={activeStep === 0 || loading}
             >
-              {t('interview.previous')}
+              {t('Previous Question')}
             </Button>
             <Button
               variant="contained"
@@ -91,8 +91,8 @@ const Interview: React.FC = () => {
               endIcon={loading && <CircularProgress size={20} />}
             >
               {activeStep === questions.length - 1
-                ? t('interview.end')
-                : t('interview.next')}
+                ? t('End Interview')
+                : t('Next Question')}
             </Button>
           </Box>
         </Paper>

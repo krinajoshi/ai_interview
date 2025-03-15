@@ -71,19 +71,35 @@ app.post('/api/v1/auth/register', (req, res) => {
         message: 'All fields are required'
       });
     }
+
+    // Check if user already exists
+    const existingUser = users.find(user => user.email === email);
+    if (existingUser) {
+      return res.status(409).json({
+        status: 'error',
+        message: 'User already exists'
+      });
+    }
     
     const newUser = {
       id: Date.now().toString(),
       email,
+      password, // In a real app, this would be hashed
       fullName,
       createdAt: new Date().toISOString()
     };
     
-    console.log('Created new user:', newUser);
+    // Add user to our mock database
+    users.push(newUser);
     
+    console.log('Created new user:', newUser);
+    console.log('Current users in database:', users);
+    
+    // Return user without password
+    const { password: _, ...userWithoutPassword } = newUser;
     res.status(201).json({
       status: 'success',
-      user: newUser
+      user: userWithoutPassword
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -120,18 +136,28 @@ app.post('/api/v1/auth/login', (req, res) => {
       });
     }
     
+    // Verify password
+    if (user.password !== password) {
+      console.log('Login failed: Invalid password');
+      return res.status(401).json({
+        status: 'error',
+        message: 'Invalid credentials'
+      });
+    }
+    
     console.log('User logged in successfully:', user);
     
-    // Return success response
+    // Return success response without password
+    const { password: _, ...userWithoutPassword } = user;
     res.status(200).json({
       status: 'success',
-      user
+      user: userWithoutPassword
     });
   } catch (error) {
     console.error('Error during login:', error);
     res.status(500).json({
       status: 'error',
-      message: 'Login failed due to server error'
+      message: error.message || 'Login failed due to server error'
     });
   }
 });
