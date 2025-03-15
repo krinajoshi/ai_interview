@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import * as React from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Container,
@@ -17,11 +17,12 @@ import { useAppSelector } from '../../store';
 const Profile: React.FC = () => {
   const { t } = useTranslation();
   const user = useAppSelector((state) => state.auth.user);
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [success, setSuccess] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [isEditing, setIsEditing] = React.useState(false);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = React.useState({
     fullName: user?.fullName || '',
     email: user?.email || '',
     currentPassword: '',

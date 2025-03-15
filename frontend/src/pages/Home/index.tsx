@@ -1,50 +1,38 @@
 import React from 'react';
-import { useTranslation } from 'react-i18next';
-import { Typography, Container, Box, Button } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { Typography, Box, Button } from '@mui/material';
+import { Link } from 'react-router-dom';
 
 const Home: React.FC = () => {
-  const { t } = useTranslation();
-  const navigate = useNavigate();
-
   return (
-    <Container maxWidth="md">
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          textAlign: 'center',
-          py: 8,
-        }}
-      >
-        <Typography variant="h2" component="h1" gutterBottom>
-          {t('common.welcome')}
-        </Typography>
-        <Typography variant="h5" color="text.secondary" paragraph>
-          Practice interviews with AI and improve your skills
-        </Typography>
-        <Box sx={{ mt: 4 }}>
-          <Button
-            variant="contained"
-            color="primary"
-            size="large"
-            onClick={() => navigate('/interview')}
-            sx={{ mr: 2 }}
-          >
-            {t('interview.start')}
-          </Button>
-          <Button
-            variant="outlined"
-            color="primary"
-            size="large"
-            onClick={() => navigate('/dashboard')}
-          >
-            {t('common.dashboard')}
-          </Button>
-        </Box>
+    <Box sx={{ textAlign: 'center', py: 4 }}>
+      <Typography variant="h2" component="h1" gutterBottom>
+        Welcome to AI Interview Platform
+      </Typography>
+      <Typography variant="h5" component="h2" gutterBottom>
+        Prepare for your next interview with AI-powered practice sessions
+      </Typography>
+      <Box sx={{ mt: 4 }}>
+        <Button
+          component={Link}
+          to="/register"
+          variant="contained"
+          color="primary"
+          size="large"
+          sx={{ mr: 2 }}
+        >
+          Get Started
+        </Button>
+        <Button
+          component={Link}
+          to="/login"
+          variant="outlined"
+          color="primary"
+          size="large"
+        >
+          Login
+        </Button>
       </Box>
-    </Container>
+    </Box>
   );
 };
 
