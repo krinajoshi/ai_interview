@@ -157,4 +157,56 @@ npm test
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Running in GitHub Codespaces
+
+When running the application in GitHub Codespaces, follow these additional steps:
+
+### Frontend Setup for Codespaces
+1. Make sure you're in the frontend directory:
+```bash
+cd frontend
+```
+
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Start the development server:
+```bash
+npm start
+```
+
+The frontend will be available at the Codespace's forwarded port (usually `https://YOUR-CODESPACE-NAME-3000.preview.app.github.dev`)
+
+### Backend Setup for Codespaces
+1. Make sure you're in the backend directory:
+```bash
+cd backend
+```
+
+2. Create and activate the virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate
+```
+
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+4. Start the backend server:
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+The backend API will be available at the Codespace's forwarded port (usually `https://YOUR-CODESPACE-NAME-8000.preview.app.github.dev`)
+
+### Environment Configuration for Codespaces
+Update your frontend `.env` file to use the Codespace URL:
+```env
+REACT_APP_API_URL=https://YOUR-CODESPACE-NAME-8000.preview.app.github.dev
+``` 
