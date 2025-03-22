@@ -86,7 +86,7 @@ const Dashboard: React.FC = () => {
           <Grid item xs={12}>
             <Paper sx={{ p: 3, mb: 3 }}>
               <Typography variant="h5" gutterBottom>
-                Welcome back, {user?.fullName}!
+                Welcome back, {user?.name}!
               </Typography>
               <Button
                 variant="contained"

@@ -13,8 +13,8 @@ import {
 import { useAppDispatch, useAppSelector } from '../../store';
 import { loginStart, loginSuccess, loginFailure } from '../../features/auth/authSlice';
 
-// Use the same API_URL as registration
-const API_URL = 'http://localhost:8001';
+// Replace hardcoded API_URL with environment variable
+const API_URL = process.env.REACT_APP_API_URL;
 
 const Login: React.FC = () => {
   const { t } = useTranslation();
@@ -44,14 +44,15 @@ const Login: React.FC = () => {
       }
 
       // Proceed with login
-      const response = await fetch(`${API_URL}/api/v1/auth/login`, {
+      const response = await fetch(`${API_URL}/api/v1/users/login`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
         },
-        credentials: 'include',
-        body: JSON.stringify({ email, password }),
+        body: new URLSearchParams({
+          username: email,  // OAuth2 expects 'username' field
+          password: password,
+        }),
       });
 
       console.log('Login response status:', response.status);
@@ -69,11 +70,11 @@ const Login: React.FC = () => {
       }
 
       if (!response.ok) {
-        throw new Error(data.message || `Login failed with status: ${response.status}`);
+        throw new Error(data.detail || `Login failed with status: ${response.status}`);
       }
 
-      if (data.status === 'success' && data.user) {
-        dispatch(loginSuccess(data.user));
+      if (data.user && data.token) {
+        dispatch(loginSuccess({ ...data.user, token: data.token }));
         navigate('/dashboard');
       } else {
         throw new Error('Invalid response format from server');

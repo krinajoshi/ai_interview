@@ -13,8 +13,8 @@ import {
 import { useAppDispatch } from '../../store';
 import { loginSuccess } from '../../features/auth/authSlice';
 
-// Ensure we have a valid API URL
-const API_URL = 'http://localhost:8001';
+// Replace hardcoded API_URL with environment variable
+const API_URL = process.env.REACT_APP_API_URL;
 
 const Register: React.FC = () => {
   const { t } = useTranslation();
@@ -27,7 +27,7 @@ const Register: React.FC = () => {
     email: '',
     password: '',
     confirmPassword: '',
-    fullName: '',
+    name: '',
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -63,17 +63,20 @@ const Register: React.FC = () => {
       }
 
       // Proceed with registration
-      const response = await fetch(`${API_URL}/api/v1/auth/register`, {
+      const response = await fetch(`${API_URL}/api/v1/users/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
+          'Origin': 'http://localhost:3000'
         },
         credentials: 'include',
+        mode: 'cors',
         body: JSON.stringify({
           email: formData.email,
           password: formData.password,
-          fullName: formData.fullName,
+          name: formData.name,
+          preferred_language: "en",
+          subscription_status: "free"
         }),
       });
 
@@ -92,11 +95,11 @@ const Register: React.FC = () => {
       }
 
       if (!response.ok) {
-        throw new Error(data.message || `Registration failed with status: ${response.status}`);
+        throw new Error(data.detail || `Registration failed with status: ${response.status}`);
       }
 
-      if (data.status === 'success' && data.user) {
-        dispatch(loginSuccess(data.user));
+      if (data.user && data.token) {
+        dispatch(loginSuccess({ ...data.user, token: data.token }));
         navigate('/dashboard');
       } else {
         throw new Error('Invalid response format from server');
@@ -132,12 +135,12 @@ const Register: React.FC = () => {
             margin="normal"
             required
             fullWidth
-            id="fullName"
+            id="name"
             label="Full Name"
-            name="fullName"
+            name="name"
             autoComplete="name"
             autoFocus
-            value={formData.fullName}
+            value={formData.name}
             onChange={handleChange}
             placeholder="Enter your full name"
           />

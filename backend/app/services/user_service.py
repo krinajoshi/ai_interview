@@ -56,6 +56,12 @@ async def authenticate_user(email: str, password: str) -> Optional[UserInDB]:
         return None
     return user
 
+# Helper function to convert UserInDB to User
+def convert_to_user(db_user: UserInDB) -> User:
+    user_dict = db_user.dict()
+    user_dict["id"] = str(db_user.id)  # Convert ObjectId to string
+    return User(**user_dict)
+
 async def update_user(user_id: str, user_update: UserUpdate) -> UserInDB:
     update_data = user_update.dict(exclude_unset=True)
     

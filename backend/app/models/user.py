@@ -39,14 +39,20 @@ class UserInDB(UserBase):
         allow_population_by_field_name = True
         arbitrary_types_allowed = True
         json_encoders = {ObjectId: str}
+        
+    @property
+    def str_id(self) -> str:
+        return str(self.id)
 
 class User(BaseModel):
     id: str
     email: EmailStr
-    full_name: str
+    name: str
     is_active: bool = True
     is_superuser: bool = False
     hashed_password: str
+    preferred_language: str = "en"
+    subscription_status: str = "free"
 
     class Config:
         from_attributes = True

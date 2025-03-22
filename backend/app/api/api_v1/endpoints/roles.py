@@ -13,14 +13,14 @@ from ....services.role_service import (
     remove_skill_from_role,
     get_role_statistics
 )
-from ....core.deps import get_current_user, get_current_superuser
+from ....core.deps import get_current_user, get_current_active_superuser
 
 router = APIRouter()
 
 @router.post("", response_model=Role)
 async def create_new_role(
     role_data: RoleCreate,
-    current_user: User = Depends(get_current_superuser)
+    current_user: User = Depends(get_current_active_superuser)
 ):
     """Create a new role (superuser only)"""
     return await create_role(role_data)
@@ -59,7 +59,7 @@ async def get_role_by_id(
 async def update_role_details(
     role_id: str,
     role_update: RoleUpdate,
-    current_user: User = Depends(get_current_superuser)
+    current_user: User = Depends(get_current_active_superuser)
 ):
     """Update a role (superuser only)"""
     return await update_role(role_id, role_update)
@@ -67,7 +67,7 @@ async def update_role_details(
 @router.delete("/{role_id}")
 async def delete_role(
     role_id: str,
-    current_user: User = Depends(get_current_superuser)
+    current_user: User = Depends(get_current_active_superuser)
 ):
     """Deactivate a role (superuser only)"""
     success = await deactivate_role(role_id)
@@ -91,7 +91,7 @@ async def add_skill_to_role_endpoint(
     role_id: str,
     skill: Skill,
     importance: str = "required",
-    current_user: User = Depends(get_current_superuser)
+    current_user: User = Depends(get_current_active_superuser)
 ):
     """Add a skill to a role (superuser only)"""
     if importance not in ["required", "preferred"]:
@@ -107,7 +107,7 @@ async def remove_skill_from_role_endpoint(
     role_id: str,
     skill_name: str,
     importance: str = "required",
-    current_user: User = Depends(get_current_superuser)
+    current_user: User = Depends(get_current_active_superuser)
 ):
     """Remove a skill from a role (superuser only)"""
     if importance not in ["required", "preferred"]:

@@ -23,11 +23,11 @@ const Profile: React.FC = () => {
   const [isEditing, setIsEditing] = React.useState(false);
 
   const [formData, setFormData] = React.useState({
-    fullName: user?.fullName || '',
+    name: user?.name || '',
     email: user?.email || '',
     currentPassword: '',
     newPassword: '',
-    confirmNewPassword: '',
+    confirmPassword: '',
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -60,7 +60,7 @@ const Profile: React.FC = () => {
     setError(null);
     setSuccess(false);
 
-    if (formData.newPassword !== formData.confirmNewPassword) {
+    if (formData.newPassword !== formData.confirmPassword) {
       setError(t('auth.passwordsDoNotMatch'));
       setLoading(false);
       return;
@@ -74,7 +74,7 @@ const Profile: React.FC = () => {
         ...formData,
         currentPassword: '',
         newPassword: '',
-        confirmNewPassword: '',
+        confirmPassword: '',
       });
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to change password');
@@ -96,13 +96,13 @@ const Profile: React.FC = () => {
             <Paper sx={{ p: 3 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
                 <Avatar
-                  sx={{ width: 100, height: 100, mr: 3 }}
+                  sx={{ width: 64, height: 64, mr: 2 }}
                   src={user?.avatar}
                 >
-                  {user?.fullName?.charAt(0)}
+                  {user?.name?.charAt(0)}
                 </Avatar>
                 <Box>
-                  <Typography variant="h6">{user?.fullName}</Typography>
+                  <Typography variant="h6">{user?.name}</Typography>
                   <Typography color="text.secondary">{user?.email}</Typography>
                 </Box>
               </Box>
@@ -123,8 +123,8 @@ const Profile: React.FC = () => {
                   fullWidth
                   margin="normal"
                   label="Full Name"
-                  name="fullName"
-                  value={formData.fullName}
+                  name="name"
+                  value={formData.name}
                   onChange={handleChange}
                 />
                 <TextField
@@ -179,8 +179,8 @@ const Profile: React.FC = () => {
                   margin="normal"
                   type="password"
                   label="Confirm New Password"
-                  name="confirmNewPassword"
-                  value={formData.confirmNewPassword}
+                  name="confirmPassword"
+                  value={formData.confirmPassword}
                   onChange={handleChange}
                 />
                 <Button
