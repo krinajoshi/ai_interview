@@ -13,7 +13,8 @@ from ....services.user_service import (
     update_user,
     update_last_login,
     deactivate_user,
-    get_user_statistics
+    get_user_statistics,
+    convert_to_user
 )
 from ....core.deps import get_current_user
 
@@ -22,21 +23,23 @@ router = APIRouter()
 @router.post("/register", response_model=UserInResponse)
 async def register(user_data: UserCreate):
     """Register a new user"""
-    user = await create_user(user_data)
+    db_user = await create_user(user_data)
     
     # Create access token
     access_token = create_access_token(
-        data={"sub": str(user.id)},
+        subject=str(db_user.id),
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     
+    # Convert UserInDB to User
+    user = convert_to_user(db_user)
     return UserInResponse(user=user, token=access_token)
 
 @router.post("/login", response_model=UserInResponse)
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     """Login user and return access token"""
-    user = await authenticate_user(form_data.username, form_data.password)
-    if not user:
+    db_user = await authenticate_user(form_data.username, form_data.password)
+    if not db_user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -44,14 +47,16 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         )
     
     # Update last login
-    await update_last_login(str(user.id))
+    await update_last_login(str(db_user.id))
     
     # Create access token
     access_token = create_access_token(
-        data={"sub": str(user.id)},
+        subject=str(db_user.id),
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     
+    # Convert UserInDB to User
+    user = convert_to_user(db_user)
     return UserInResponse(user=user, token=access_token)
 
 @router.get("/me", response_model=User)

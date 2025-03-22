@@ -5,8 +5,11 @@ import boto3
 import logging
 from ..core.config import settings
 from ..models.interview import Interview, Question
-from ..models.resume import Resume
+from ..models.resume import Resume, ParsedResumeData
 from ..db.mongodb import get_database
+import docx2txt
+import PyPDF2
+import io
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -236,4 +239,136 @@ async def generate_avatar_response(text: str, language: str = "en") -> bytes:
         return response.content
     except Exception as e:
         logger.error(f"Error in avatar response generation: {str(e)}")
-        return b"" 
+        return b""
+
+async def analyze_resume(file_url: str) -> Dict:
+    """Analyze resume content using OpenAI API"""
+    try:
+        # Download file from S3
+        s3 = boto3.client(
+            's3',
+            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+            region_name=settings.AWS_REGION
+        )
+        
+        # Extract bucket and key from URL
+        bucket = settings.S3_BUCKET
+        key = file_url.split(f"{bucket}.s3.{settings.AWS_REGION}.amazonaws.com/")[1]
+        
+        # Get file from S3
+        response = s3.get_object(Bucket=bucket, Key=key)
+        file_content = response['Body'].read()
+        
+        # Extract text based on file type
+        text = ""
+        if key.lower().endswith('.pdf'):
+            pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_content))
+            for page in pdf_reader.pages:
+                text += page.extract_text()
+        elif key.lower().endswith('.docx'):
+            text = docx2txt.process(io.BytesIO(file_content))
+        else:
+            raise ValueError("Unsupported file format")
+
+        # Prepare prompt for GPT
+        prompt = f"""
+        Analyze the following resume and extract structured information:
+        
+        {text}
+        
+        Extract and organize the following information:
+        1. Skills (technical and soft skills)
+        2. Work experience (company, position, dates, responsibilities)
+        3. Education (institution, degree, dates)
+        4. Projects (name, description, technologies used)
+        5. Languages
+        6. Certifications
+        
+        Format the response as structured data that can be parsed.
+        """
+        
+        # Call OpenAI API
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are an expert resume analyzer."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        
+        # Process and structure the response
+        analysis = response.choices[0].message.content
+        
+        # Call OpenAI again to get structured JSON
+        structure_prompt = f"""
+        Convert this resume analysis into a structured JSON format:
+        
+        {analysis}
+        
+        Format it as:
+        {{
+            "parsed_data": {{
+                "skills": ["skill1", "skill2", ...],
+                "experience": [
+                    {{
+                        "company": "company name",
+                        "position": "job title",
+                        "start_date": "YYYY-MM-DD",
+                        "end_date": "YYYY-MM-DD",
+                        "description": "job description",
+                        "technologies": ["tech1", "tech2", ...]
+                    }}
+                ],
+                "education": [
+                    {{
+                        "institution": "school name",
+                        "degree": "degree name",
+                        "field_of_study": "major",
+                        "start_date": "YYYY-MM-DD",
+                        "end_date": "YYYY-MM-DD",
+                        "description": "additional details"
+                    }}
+                ],
+                "projects": [
+                    {{
+                        "name": "project name",
+                        "description": "project description",
+                        "technologies": ["tech1", "tech2", ...],
+                        "url": "project url",
+                        "start_date": "YYYY-MM-DD",
+                        "end_date": "YYYY-MM-DD"
+                    }}
+                ],
+                "languages": ["language1", "language2", ...],
+                "certifications": ["cert1", "cert2", ...]
+            }},
+            "confidence_score": 0.95,
+            "skill_matches": {{
+                "python": 0.9,
+                "javascript": 0.8,
+                ...
+            }}
+        }}
+        """
+        
+        structured_response = await openai.ChatCompletion.acreate(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a JSON formatter for resume data."},
+                {"role": "user", "content": structure_prompt}
+            ]
+        )
+        
+        # Parse the structured response
+        import json
+        result = json.loads(structured_response.choices[0].message.content)
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error in resume analysis: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to analyze resume: {str(e)}"
+        ) 

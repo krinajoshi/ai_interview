@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 from .user import PyObjectId
 
@@ -60,4 +60,4 @@ class ResumeUpdate(BaseModel):
 
 class ResumeInResponse(BaseModel):
     resume: Resume
-    analysis: Dict[str, any]  # Additional analysis data 
+    analysis: Dict[str, Any]  # Additional analysis data 

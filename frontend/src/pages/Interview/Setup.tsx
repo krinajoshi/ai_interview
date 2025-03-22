@@ -23,7 +23,7 @@ import {
 } from '../../features/interview/interviewSlice';
 import LanguageSelector from '../../components/LanguageSelector';
 
-const API_URL = 'http://localhost:8001';
+const API_URL = process.env.REACT_APP_API_URL;
 
 const InterviewSetup: React.FC = () => {
   const navigate = useNavigate();
