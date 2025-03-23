@@ -128,6 +128,20 @@ const Interview: React.FC = () => {
     }
   }, [currentQuestionIndex, questions, answers, isInterviewStarted]);
 
+  // Add effect to handle interview completion
+  React.useEffect(() => {
+    if (isInterviewComplete) {
+      console.log('Interview complete, language:', selectedLanguage);
+      // Add a small delay to show the completion message before redirecting
+      const timer = setTimeout(() => {
+        console.log('Redirecting to dashboard...');
+        dispatch(resetInterview());
+        navigate('/dashboard');
+      }, 2000); // 2 second delay
+      return () => clearTimeout(timer);
+    }
+  }, [isInterviewComplete, navigate, dispatch, selectedLanguage]);
+
   const handleLanguageChange = (lang: Language) => {
     dispatch(setLanguage(lang));
   };
@@ -207,10 +221,17 @@ const Interview: React.FC = () => {
     if (currentQuestionIndex < questions.length - 1) {
       dispatch(nextQuestion());
     } else {
+      // Transform questions to match Dashboard's expected format
+      const simplifiedQuestions = questions.map(q => ({
+        id: q.id,
+        text: q.text[selectedLanguage], // Use the current language's text
+        type: q.type
+      }));
+
       // Save to localStorage before completing
       const interviewData = {
         jobTitle,
-        questions,
+        questions: simplifiedQuestions,
         answers: {
           ...answers,
           [currentQuestion.id]: answerWithFeedback // Include the last answer
@@ -222,7 +243,7 @@ const Interview: React.FC = () => {
       pastInterviews.push(interviewData);
       localStorage.setItem('pastInterviews', JSON.stringify(pastInterviews));
 
-      // Complete the interview
+      // Complete the interview and navigate to dashboard
       dispatch(completeInterview());
     }
   };
@@ -242,31 +263,32 @@ const Interview: React.FC = () => {
   };
 
   if (isInterviewComplete) {
+    console.log('Showing completion screen');
     return (
       <Container maxWidth="md">
         <Box sx={{ py: 4 }}>
           <Paper sx={{ p: 3 }}>
-            <Typography variant="h5" gutterBottom>
+            <Typography variant="h5" gutterBottom align="center">
               {selectedLanguage === 'fr' ? 'Entretien terminé !' : 
                selectedLanguage === 'ar' ? '!تم الانتهاء من المقابلة' : 
                'Interview Complete!'}
             </Typography>
-            <Typography paragraph>
+            <Typography paragraph align="center">
               {selectedLanguage === 'fr' ? 
                 'Merci d\'avoir terminé l\'entretien. Vos réponses ont été enregistrées et analysées.' :
                selectedLanguage === 'ar' ?
                 '.شكراً لإكمال المقابلة. تم تسجيل إجاباتك وتحليلها' :
                 'Thank you for completing the interview. Your responses have been recorded and analyzed.'}
             </Typography>
-            <Box sx={{ mt: 3, display: 'flex', gap: 2, justifyContent: 'center' }}>
-              <Button
-                variant="contained"
-                onClick={handleSaveAndReturn}
-              >
-                {selectedLanguage === 'fr' ? 'Retourner au tableau de bord' :
-                 selectedLanguage === 'ar' ? 'العودة إلى لوحة التحكم' :
-                 'Return to Dashboard'}
-              </Button>
+            <Typography paragraph align="center" color="text.secondary">
+              {selectedLanguage === 'fr' ? 
+                'Redirection vers le tableau de bord...' :
+               selectedLanguage === 'ar' ?
+                '...جارٍ إعادة التوجيه إلى لوحة التحكم' :
+                'Redirecting to dashboard...'}
+            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+              <CircularProgress />
             </Box>
           </Paper>
         </Box>

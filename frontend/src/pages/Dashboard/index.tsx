@@ -41,9 +41,14 @@ interface Answer {
 
 interface Interview {
   jobTitle: string;
-  questions: Array<{ id: string; text: string; type: string }>;
+  questions: Array<{ 
+    id: string; 
+    text: string;
+    type: string;
+  }>;
   answers: Record<string, Answer>;
   completedAt: string;
+  language: string;
 }
 
 const Dashboard: React.FC = () => {

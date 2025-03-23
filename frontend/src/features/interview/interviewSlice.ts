@@ -103,6 +103,9 @@ const interviewSlice = createSlice({
     completeInterview: (state) => {
       state.isInterviewComplete = true;
       state.isInterviewStarted = false;
+      state.loading = false;
+      state.error = null;
+      state.currentQuestionIndex = state.questions.length - 1;
     },
     resetInterview: () => initialState,
     setLoading: (state, action: PayloadAction<boolean>) => {
