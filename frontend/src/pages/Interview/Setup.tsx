@@ -62,6 +62,12 @@ const InterviewSetup: React.FC = () => {
     dispatch(setError(null));
 
     try {
+      // Get the auth token from localStorage
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
+
       // Prepare the request payload
       const payload = {
         jobTitle: jobTitleInput,
@@ -75,6 +81,7 @@ const InterviewSetup: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
       });
@@ -84,6 +91,8 @@ const InterviewSetup: React.FC = () => {
       }
 
       const data = await response.json();
+      console.log("Response data:", data);
+      console.log("Questions data:", data.questions);
       
       // Save the resume file name if returned
       if (data.resumeFileName) {
@@ -92,17 +101,19 @@ const InterviewSetup: React.FC = () => {
 
       // Validate the questions format
       if (!Array.isArray(data.questions) || data.questions.length === 0) {
+        console.error("Questions is not an array or is empty:", data.questions);
         throw new Error('Invalid questions format received from server');
       }
 
       // Ensure each question has the required structure
-      const validQuestions = data.questions.every((q: any) => 
-        q.id && 
-        q.text && 
-        typeof q.text === 'object' &&
-        q.text[selectedLanguage] &&
-        q.type
-      );
+      const validQuestions = data.questions.every((q: any) => {
+        const isValid = q.id && q.text && typeof q.text === 'object' && q.text[selectedLanguage] && q.type;
+        if (!isValid) {
+          console.error("Invalid question format:", q);
+          console.error(`id: ${Boolean(q.id)}, text: ${Boolean(q.text)}, text object: ${q.text && typeof q.text === 'object'}, selected language: ${q.text && q.text[selectedLanguage]}, type: ${Boolean(q.type)}`);
+        }
+        return isValid;
+      });
 
       if (!validQuestions) {
         throw new Error('Invalid question format received from server');

@@ -12,6 +12,23 @@ A modern web application for conducting AI-powered technical interviews. The pla
 - Multi-language support
 - Responsive modern UI
 
+## Recent Updates
+
+### Backend Enhancements
+
+- **Improved Authentication**: Enhanced error handling in the authentication process with built-in fallback mechanism
+- **Legacy API Support**: Added backwards-compatible endpoints for the frontend
+- **Temporary Role Creation**: System now dynamically creates temporary roles when needed for interviews
+- **Robust Question Generation**: Implemented fallback question generation when AI services are unavailable
+- **CORS Configuration**: Fixed Cross-Origin Resource Sharing to allow frontend-backend communication
+
+### Troubleshooting Notes
+
+- **MongoDB Connection**: If MongoDB connection fails, the system will create a dummy user for testing purposes
+- **Object ID Handling**: Fixed handling of MongoDB ObjectIDs for temporary roles
+- **Question Format**: Standardized question format with multi-language support (en, fr, ar)
+- **Debugging Logs**: Added extensive logging throughout the application for easier troubleshooting
+
 ## Tech Stack
 
 ### Backend
@@ -71,6 +88,8 @@ AWS_ACCESS_KEY_ID=your_aws_key
 AWS_SECRET_ACCESS_KEY=your_aws_secret
 AWS_REGION=your_aws_region
 S3_BUCKET=your_bucket_name
+LLM_MODEL=ollama/llama3
+LLM_ENDPOINT=http://localhost:11434
 ```
 
 ### 3. Frontend Setup

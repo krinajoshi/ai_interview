@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List, Dict
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from .user import PyObjectId
 
 class Skill(BaseModel):
@@ -23,10 +23,11 @@ class Role(BaseModel):
     last_updated: datetime = Field(default_factory=datetime.utcnow)
     is_active: bool = True
 
-    class Config:
-        allow_population_by_field_name = True
-        arbitrary_types_allowed = True
-        json_encoders = {PyObjectId: str}
+    model_config = ConfigDict(
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        json_encoders={PyObjectId: str}
+    )
 
 class RoleCreate(BaseModel):
     name: str

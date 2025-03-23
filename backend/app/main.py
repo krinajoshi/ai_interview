@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -11,6 +11,7 @@ from app.core.middleware import (
 )
 from app.core.exceptions import AIInterviewException
 from app.db.mongodb import connect_to_mongo, close_mongo_connection
+from app.core.deps import get_current_user
 import uvicorn
 
 app = FastAPI(
@@ -23,7 +24,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
     expose_headers=["*"],
     max_age=3600,
@@ -49,7 +50,23 @@ async def shutdown_db_client():
 # Health check endpoint
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    """
+    Health check endpoint.
+    """
+    return {"status": "ok", "message": "API is running"}
+
+# Test endpoint for authentication
+@app.get("/test-auth")
+async def test_auth(current_user = Depends(get_current_user)):
+    """
+    Test endpoint for authentication.
+    """
+    return {
+        "status": "ok",
+        "message": "Authentication successful",
+        "user_id": str(current_user.id),
+        "email": current_user.email
+    }
 
 # Exception handlers
 @app.exception_handler(AIInterviewException)

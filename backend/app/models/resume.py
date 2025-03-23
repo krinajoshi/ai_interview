@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from .user import PyObjectId
 
 class Education(BaseModel):
@@ -45,10 +45,11 @@ class Resume(BaseModel):
     confidence_score: float  # Parsing confidence score
     skill_matches: Dict[str, float]  # Skill to confidence mapping
 
-    class Config:
-        allow_population_by_field_name = True
-        arbitrary_types_allowed = True
-        json_encoders = {PyObjectId: str}
+    model_config = ConfigDict(
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        json_encoders={PyObjectId: str}
+    )
 
 class ResumeCreate(BaseModel):
     file_url: str

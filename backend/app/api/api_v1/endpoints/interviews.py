@@ -1,7 +1,7 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
 from ....models.user import User
-from ....models.interview import Interview, InterviewCreate, InterviewInResponse
+from ....models.interview import Interview, InterviewCreate, InterviewInResponse, Question
 from ....services.interview_service import (
     create_interview,
     get_interview,
@@ -13,6 +13,7 @@ from ....services.interview_service import (
     resume_interview,
     abandon_interview
 )
+from ....services.ai_service import generate_questions
 from ....core.deps import get_current_user
 
 router = APIRouter()
@@ -194,4 +195,56 @@ async def abandon_interview_session(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to abandon interview"
         )
-    return {"message": "Interview abandoned successfully"} 
+    return {"message": "Interview abandoned successfully"}
+
+@router.post("/{interview_id}/generate-questions", response_model=List[Question])
+async def generate_interview_questions(
+    interview_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Generate questions for an existing interview"""
+    # Import logging module
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Log attempt to generate questions
+    logger.info(f"Attempting to generate questions for interview {interview_id}")
+    
+    # Verify interview belongs to user
+    interview = await get_interview(interview_id)
+    if not interview:
+        logger.error(f"Interview not found: {interview_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Interview not found"
+        )
+    
+    if str(interview.user_id) != str(current_user.id):
+        logger.error(f"User {current_user.id} not authorized to access interview {interview_id}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this interview"
+        )
+    
+    # Generate questions
+    try:
+        logger.info(f"Calling generate_questions for interview {interview_id}")
+        questions = await generate_questions(interview)
+        logger.info(f"Successfully generated {len(questions)} questions for interview {interview_id}")
+        return questions
+    except ValueError as ve:
+        # Specific error for value-related issues
+        logger.error(f"Value error in question generation: {str(ve)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error generating questions: {str(ve)}"
+        )
+    except Exception as e:
+        # Generic error handling
+        logger.error(f"Unexpected error in question generation: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate questions: {str(e)}"
+        )
