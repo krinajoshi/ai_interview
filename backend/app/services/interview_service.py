@@ -3,19 +3,37 @@ from typing import Optional, List
 from fastapi import HTTPException
 from ..db.mongodb import find_one, find_many, insert_one, update_one
 from ..models.interview import Interview, Question, Answer, InterviewCreate, VoiceMetrics, FacialMetrics
+from ..models.role import Role
 from ..services.ai_service import (
     generate_questions,
     evaluate_answer,
-    analyze_voice_metrics,
+    analyze_voice,
     analyze_facial_metrics,
     generate_feedback
 )
+import bson
 
 async def create_interview(user_id: str, interview_data: InterviewCreate) -> Interview:
+    # Import logging module
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"Creating interview for user {user_id} with role {interview_data.role_id}")
+    
+    # Ensure role_id is used properly
+    try:
+        role_id = interview_data.role_id
+        # If role_id is already an ObjectId instance, use it as is
+        if not isinstance(role_id, bson.ObjectId) and not isinstance(role_id, str):
+            role_id = str(role_id)  # Convert to string if it's another type
+    except Exception as e:
+        logger.error(f"Error processing role_id: {str(e)}")
+        role_id = str(bson.ObjectId())  # Generate a new ID in case of error
+    
     # Create interview
     interview = Interview(
         user_id=user_id,
-        role_id=interview_data.role_id,
+        role_id=role_id,
         language=interview_data.language,
         status="scheduled",
         improvement_areas=[],
@@ -23,17 +41,23 @@ async def create_interview(user_id: str, interview_data: InterviewCreate) -> Int
         answers=[]
     )
     
+    # Insert interview
     interview_id = await insert_one("interviews", interview.dict(by_alias=True))
     interview.id = interview_id
+    logger.info(f"Created interview with ID: {interview_id}")
     
     # Generate initial questions
     questions = await generate_questions(interview)
+    logger.info(f"Generated {len(questions)} questions for interview {interview_id}")
+    
+    # Insert questions
     for q in questions:
         q.interview_id = interview_id
         question_id = await insert_one("questions", q.dict(by_alias=True))
         q.id = question_id
         interview.questions.append(q)
     
+    logger.info(f"Inserted {len(questions)} questions for interview {interview_id}")
     return interview
 
 async def get_interview(interview_id: str) -> Optional[Interview]:
@@ -107,7 +131,7 @@ async def update_interview_metrics(
     metrics = {}
     
     if voice_data:
-        voice_metrics = await analyze_voice_metrics(voice_data)
+        voice_metrics = await analyze_voice(voice_data)
         metrics["voice_metrics"] = VoiceMetrics(**voice_metrics)
     
     if facial_data:

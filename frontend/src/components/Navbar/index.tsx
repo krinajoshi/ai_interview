@@ -17,6 +17,7 @@ import {
   Language,
 } from '@mui/icons-material';
 import { useAppSelector, useAppDispatch } from '../../store';
+import { logout } from '../../features/auth/authSlice';
 
 const Navbar: React.FC = () => {
   const { t, i18n } = useTranslation();
@@ -49,7 +50,7 @@ const Navbar: React.FC = () => {
   };
 
   const handleLogout = () => {
-    // dispatch(logout());
+    dispatch(logout());
     navigate('/login');
   };
 
