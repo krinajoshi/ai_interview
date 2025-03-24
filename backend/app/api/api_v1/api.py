@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Body
 from pydantic import BaseModel
 from typing import Optional, List
-from .endpoints import users, interviews, resumes, roles
+from .endpoints import users, interviews, resumes, roles, sentiment, transcription
 from .endpoints.interviews import router as interviews_router
 from app.models.user import User
 from app.core.deps import get_current_user
@@ -26,6 +26,8 @@ api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(interviews.router, prefix="/interviews", tags=["interviews"])
 api_router.include_router(resumes.router, prefix="/resumes", tags=["resumes"])
 api_router.include_router(roles.router, prefix="/roles", tags=["roles"])
+api_router.include_router(sentiment.router, prefix="/sentiment", tags=["sentiment"])
+api_router.include_router(transcription.router, prefix="/transcription", tags=["transcription"])
 
 # Create a custom handler for the legacy endpoint
 async def legacy_generate_questions(
