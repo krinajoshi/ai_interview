@@ -6,6 +6,9 @@ import os
 from dotenv import load_dotenv
 import logging
 import re
+import cohere
+import asyncio
+import json
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -17,10 +20,20 @@ router = APIRouter()
 
 HUGGING_FACE_API_URL = "https://api-inference.huggingface.co/models/nlptown/bert-base-multilingual-uncased-sentiment"
 HUGGING_FACE_TOKEN = os.getenv("HUGGING_FACE_TOKEN")
+COHERE_API_KEY = os.getenv("COHERE_API_KEY")
+
+# Initialize Cohere client
+try:
+    co = cohere.Client(COHERE_API_KEY)
+    logger.info("Cohere client initialized successfully")
+except Exception as e:
+    logger.error(f"Error initializing Cohere client: {str(e)}")
+    co = None
 
 class SentimentRequest(BaseModel):
     text: str
     question: Optional[str] = None
+    transcription: Optional[str] = None
 
 class AnalysisResponse(BaseModel):
     sentiment: Dict[str, Any]
@@ -28,6 +41,7 @@ class AnalysisResponse(BaseModel):
     improvement_points: List[str]
     score: int
     rating_explanation: str
+    content_analysis: Optional[Dict[str, Any]] = None
 
 def get_rating_explanation(star_rating: int) -> str:
     explanations = {
@@ -39,7 +53,91 @@ def get_rating_explanation(star_rating: int) -> str:
     }
     return explanations.get(star_rating, "Rating explanation not available")
 
-def analyze_content_quality(text: str, question: Optional[str] = None) -> Dict[str, Any]:
+async def check_content_relevance(text: str, question: str) -> Dict[str, Any]:
+    """
+    Use Cohere to check content relevance between question and answer
+    """
+    try:
+        if not co or not COHERE_API_KEY:
+            logger.error("Cohere client not initialized or API key missing")
+            return {
+                "relevance_score": 0.0,
+                "is_relevant": False,
+                "error": "Content relevance check unavailable"
+            }
+
+        # First, get embeddings to compare semantic similarity
+        embeddings = co.embed(
+            texts=[question, text],
+            model='embed-english-v3.0',
+            input_type='search_document'
+        ).embeddings
+
+        # Calculate cosine similarity between question and answer embeddings
+        similarity = sum(a * b for a, b in zip(embeddings[0], embeddings[1])) / (
+            (sum(a * a for a in embeddings[0]) ** 0.5) *
+            (sum(b * b for b in embeddings[1]) ** 0.5)
+        )
+
+        # Then use rerank for more detailed analysis
+        rerank_results = co.rerank(
+            query=question,
+            documents=[text],
+            model='rerank-english-v2.0',
+            top_n=1
+        )
+
+        relevance_score = rerank_results[0].relevance_score
+        
+        # Combine both scores for better accuracy
+        combined_score = (similarity + relevance_score) / 2
+        
+        # Get detailed feedback using Cohere's generate
+        feedback_prompt = f'''Analyze how well this answer addresses the question. Be direct and honest.
+Question: {question}
+Answer: {text}
+Provide a JSON with these fields:
+- relevant_points: list of points that directly address the question
+- missing_points: list of expected points that were not addressed
+- off_topic_content: list of content that wasn't relevant to the question
+'''
+
+        feedback_response = co.generate(
+            prompt=feedback_prompt,
+            max_tokens=300,
+            temperature=0.1,
+            format='json'
+        )
+
+        try:
+            content_feedback = json.loads(feedback_response.generations[0].text)
+        except:
+            content_feedback = {
+                "relevant_points": [],
+                "missing_points": ["Unable to analyze specific points"],
+                "off_topic_content": []
+            }
+
+        logger.info(f"Content relevance score: {combined_score}")
+        logger.info(f"Content feedback: {content_feedback}")
+        
+        return {
+            "relevance_score": combined_score,
+            "is_relevant": combined_score > 0.6,
+            "similarity_score": similarity,
+            "rerank_score": relevance_score,
+            "feedback": content_feedback,
+            "error": None
+        }
+    except Exception as e:
+        logger.error(f"Error in content relevance check: {str(e)}")
+        return {
+            "relevance_score": 0.0,
+            "is_relevant": False,
+            "error": str(e)
+        }
+
+def analyze_content_quality(text: str, question: Optional[str] = None, relevance_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Analyze the quality of the content"""
     # Check for common gibberish patterns
     gibberish_patterns = [
@@ -64,18 +162,9 @@ def analyze_content_quality(text: str, question: Optional[str] = None) -> Dict[s
     sentences = [s.strip() for s in re.split(r'[.!?]+', text) if s.strip()]
     avg_sentence_length = sum(len(s.split()) for s in sentences) / len(sentences) if sentences else 0
     
-    # Check for question relevance if question is provided
-    question_relevance = 0.0
-    if question:
-        # Extract key terms from question (excluding common stop words)
-        stop_words = {'what', 'when', 'where', 'who', 'why', 'how', 'is', 'are', 'was', 'were', 'do', 'does', 'did',
-                     'a', 'an', 'the', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'}
-        question_terms = set(word.lower() for word in question.split() if word.lower() not in stop_words)
-        answer_terms = set(word.lower() for word in text.split() if word.lower() not in stop_words)
-        
-        if question_terms:
-            matching_terms = question_terms.intersection(answer_terms)
-            question_relevance = len(matching_terms) / len(question_terms)
+    # Use Cohere's relevance score if available
+    question_relevance = relevance_data.get("relevance_score", 0.5) if relevance_data else 0.0
+    is_relevant = relevance_data.get("is_relevant", True) if relevance_data else True
     
     # Check for word repetition
     words = text.lower().split()
@@ -92,6 +181,7 @@ def analyze_content_quality(text: str, question: Optional[str] = None) -> Dict[s
         "avg_sentence_length": avg_sentence_length,
         "sentence_count": len(sentences),
         "question_relevance": question_relevance,
+        "is_relevant": is_relevant,
         "excessive_repetition": excessive_repetition,
         "word_count": len(words)
     }
@@ -104,107 +194,62 @@ def analyze_answer_content(text: str, confidence_level: float, quality_metrics: 
         
         # First check for gibberish or low-quality content
         if quality_metrics["has_gibberish"] or quality_metrics["excessive_repetition"]:
-            feedback = ["Your response contains unclear, repetitive, or non-meaningful content"]
-            improvement_points = [
-                "Please provide a clear and professional response",
-                "Use complete sentences and proper words",
-                "Avoid repetition and nonsensical combinations of letters"
-            ]
             return {
-                "feedback": feedback,
-                "improvement_points": improvement_points,
-                "quality_score": 1  # Force a low score for gibberish
+                "feedback": ["Your response contains unclear or nonsensical content"],
+                "improvement_points": [
+                    "Please provide a clear and professional response",
+                    "Use proper language and complete sentences",
+                    "Structure your answer to address the question"
+                ],
+                "quality_score": 1
             }
+
+        # Start with content relevance analysis
+        quality_score = 3  # Default neutral score
         
-        # Check question relevance
-        if question and quality_metrics["question_relevance"] < 0.3:
-            improvement_points.append("Your response doesn't seem to address the question directly")
-            quality_score = 2  # Low score for irrelevant answers
-        else:
-            quality_score = 3  # Start with neutral score
-        
-        # Check sentence structure
+        if question:
+            relevance_data = quality_metrics.get("relevance_data", {})
+            content_feedback = relevance_data.get("feedback", {})
+            
+            # Add relevant points as positive feedback
+            relevant_points = content_feedback.get("relevant_points", [])
+            if relevant_points:
+                feedback.extend([f"✓ {point}" for point in relevant_points])
+            
+            # Add missing points as improvement points
+            missing_points = content_feedback.get("missing_points", [])
+            if missing_points:
+                improvement_points.extend([f"Consider addressing: {point}" for point in missing_points])
+            
+            # Add off-topic content as improvement points
+            off_topic = content_feedback.get("off_topic_content", [])
+            if off_topic:
+                improvement_points.extend([f"Remove irrelevant content about: {point}" for point in off_topic])
+
+            # Adjust score based on relevance
+            if quality_metrics["relevance_score"] < 0.4:
+                quality_score = 1
+                improvement_points.append("Your response does not address the question")
+            elif quality_metrics["relevance_score"] < 0.6:
+                quality_score = 2
+                improvement_points.append("Your response only partially addresses the question")
+            elif quality_metrics["relevance_score"] > 0.8:
+                quality_score += 1
+                feedback.append("Your response directly addresses the question")
+
+        # Check response structure and length
         if quality_metrics["sentence_count"] < 2:
-            improvement_points.append("Provide a more detailed response with multiple sentences")
+            improvement_points.append("Your response is too brief. Provide multiple sentences")
             quality_score = min(quality_score, 2)
         elif quality_metrics["avg_sentence_length"] < 5:
-            improvement_points.append("Your sentences are very short. Try to elaborate more")
+            improvement_points.append("Your sentences are too short. Elaborate more")
             quality_score = min(quality_score, 2)
-        elif quality_metrics["avg_sentence_length"] > 25:
-            improvement_points.append("Consider breaking down long sentences for better clarity")
-        
-        # Check for specific examples and metrics
-        has_numbers = any(char.isdigit() for char in text)
-        has_specific_examples = any(keyword in text.lower() for keyword in [
-            "for example", "instance", "specifically", "when i", "during",
-            "such as", "like", "particularly"
-        ])
-        
-        # Check for STAR method components with expanded keywords
-        has_situation = any(keyword in text.lower() for keyword in [
-            "situation", "context", "when", "during", "while", "at the time",
-            "background", "scenario", "case"
-        ])
-        has_task = any(keyword in text.lower() for keyword in [
-            "task", "goal", "objective", "needed to", "had to", "responsible for",
-            "assignment", "project", "challenge"
-        ])
-        has_action = any(keyword in text.lower() for keyword in [
-            "i did", "implemented", "created", "developed", "managed", "handled",
-            "coordinated", "led", "organized", "executed", "solved"
-        ])
-        has_result = any(keyword in text.lower() for keyword in [
-            "result", "outcome", "achieved", "improved", "increased", "decreased",
-            "impact", "success", "benefit", "accomplishment"
-        ])
-        
-        # Calculate quality score based on content analysis
-        if quality_metrics["has_meaningful_structure"]:
-            quality_score += 1
-            feedback.append("Your response shows good structure and flow")
-        
-        if has_numbers and has_specific_examples:
-            quality_score += 1
-            feedback.append("Strong use of specific examples and metrics")
-        elif has_specific_examples:
-            feedback.append("Good use of specific examples")
-            improvement_points.append("Consider including quantifiable metrics to strengthen your examples")
-        elif has_numbers:
-            feedback.append("Good use of quantifiable metrics")
-            improvement_points.append("Consider providing more specific examples to context your metrics")
-        else:
-            improvement_points.append("Include specific examples and metrics to support your points")
-            quality_score -= 1
 
-        # STAR method feedback
-        star_components = [has_situation, has_task, has_action, has_result]
-        star_count = sum(star_components)
-        if star_count == 4:
-            quality_score += 1
-            feedback.append("Excellent use of the STAR method, covering all components")
-        elif star_count >= 2:
-            feedback.append("Partial use of the STAR method detected")
-            missing_components = []
-            if not has_situation: missing_components.append("situation")
-            if not has_task: missing_components.append("task")
-            if not has_action: missing_components.append("action")
-            if not has_result: missing_components.append("result")
-            improvement_points.append(f"Complete the STAR method by adding the {' and '.join(missing_components)} components")
-        else:
-            quality_score -= 1
-            improvement_points.append("Structure your answer using the STAR method (Situation, Task, Action, Result)")
-
-        # Confidence level feedback
-        if confidence_level > 0.8:
-            feedback.append(f"Your response demonstrates strong confidence ({confidence_level:.0%})")
-        elif confidence_level > 0.6:
-            feedback.append(f"Your confidence level is good ({confidence_level:.0%})")
-        else:
-            improvement_points.append(f"Work on conveying more confidence in your response (current level: {confidence_level:.0%})")
-            quality_score -= 1
-
-        # Ensure quality score stays within bounds
-        quality_score = max(1, min(5, quality_score))
+        # Ensure we have at least one piece of feedback
+        if not feedback:
+            feedback.append("Response needs improvement")
+        if not improvement_points:
+            improvement_points.append("Add more detail and structure to your response")
 
         return {
             "feedback": feedback,
@@ -226,34 +271,52 @@ async def analyze_sentiment(request: SentimentRequest) -> Dict[str, Any]:
             logger.error("Hugging Face API token not configured")
             raise HTTPException(status_code=500, detail="Hugging Face API token not configured")
 
+        if not COHERE_API_KEY:
+            logger.error("Cohere API token not configured")
+            raise HTTPException(status_code=500, detail="Cohere API token not configured")
+
         text = request.text.strip()
         question = request.question.strip() if request.question else None
+        
+        # Use transcription if available
+        if request.transcription:
+            text = request.transcription.strip()
+            logger.info("Using transcription for analysis")
 
         if not text:
             return {
                 "sentiment": {"label": "NEUTRAL", "score": 0.5},
-                "feedback": ["No text provided for analysis"],
-                "improvement_points": ["Please provide some text to analyze"],
+                "feedback": ["No response provided"],
+                "improvement_points": ["Please provide a response to analyze"],
                 "score": 1,
-                "rating_explanation": get_rating_explanation(1)
+                "rating_explanation": get_rating_explanation(1),
+                "content_analysis": None
             }
+
+        # Check content relevance with Cohere if question is provided
+        relevance_data = None
+        if question:
+            relevance_data = await check_content_relevance(text, question)
+            logger.info(f"Content relevance data: {relevance_data}")
 
         # First analyze content quality
         quality_metrics = analyze_content_quality(text, question)
+        quality_metrics["relevance_data"] = relevance_data
         logger.info(f"Content quality metrics: {quality_metrics}")
 
-        # If content is detected as gibberish or has excessive repetition, return early with low score
-        if quality_metrics["has_gibberish"] or quality_metrics["excessive_repetition"]:
+        # If content is detected as gibberish, return early with low score
+        if quality_metrics["has_gibberish"]:
             return {
                 "sentiment": {"label": "NEGATIVE", "score": 0.2},
-                "feedback": ["Your response appears to be unclear, repetitive, or contains non-meaningful content"],
+                "feedback": ["Your response contains unclear or nonsensical content"],
                 "improvement_points": [
                     "Please provide a clear and professional response",
-                    "Use complete sentences and proper words",
-                    "Avoid repetition and nonsensical combinations of letters"
+                    "Use proper language and complete sentences",
+                    "Structure your answer to address the question"
                 ],
                 "score": 1,
-                "rating_explanation": get_rating_explanation(1)
+                "rating_explanation": get_rating_explanation(1),
+                "content_analysis": relevance_data
             }
 
         logger.info(f"Analyzing text: {text[:100]}...")
@@ -329,7 +392,8 @@ async def analyze_sentiment(request: SentimentRequest) -> Dict[str, Any]:
                     "feedback": feedback,
                     "improvement_points": improvement_points,
                     "score": final_score,
-                    "rating_explanation": get_rating_explanation(final_score)
+                    "rating_explanation": get_rating_explanation(final_score),
+                    "content_analysis": content_analysis
                 }
 
             except httpx.HTTPError as e:
@@ -352,5 +416,6 @@ async def analyze_sentiment(request: SentimentRequest) -> Dict[str, Any]:
             "feedback": ["Error during analysis. Please try again."],
             "improvement_points": ["If the error persists, try rephrasing your answer"],
             "score": 3,
-            "rating_explanation": "Unable to provide accurate rating due to analysis error"
+            "rating_explanation": "Unable to provide accurate rating due to analysis error",
+            "content_analysis": None
         } 
