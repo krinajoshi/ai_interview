@@ -11,8 +11,19 @@ A modern web application for conducting AI-powered technical interviews. The pla
 - Interview analytics and progress tracking
 - Multi-language support
 - Responsive modern UI
+- Advanced content relevance analysis
+- Semantic answer evaluation
 
 ## Recent Updates
+
+### Answer Analysis Enhancements
+
+- **Cohere Integration**: Added semantic content relevance checking using Cohere's AI models
+- **Improved Feedback System**: Enhanced feedback accuracy with specific points addressed and missed
+- **Semantic Analysis**: Implemented dual-model approach using embeddings and reranking
+- **Gibberish Detection**: Added robust detection of unclear or nonsensical responses
+- **Detailed Content Analysis**: Now provides point-by-point feedback on relevant and missing content
+- **Honest Feedback**: Improved accuracy of feedback with direct, specific suggestions
 
 ### Backend Enhancements
 
@@ -54,6 +65,8 @@ A modern web application for conducting AI-powered technical interviews. The pla
 - Redis (optional, for caching)
 - AWS Account (for S3 storage)
 - OpenAI API key
+- Cohere API key (for content analysis)
+- Hugging Face API token (for sentiment analysis)
 
 ## Installation
 
@@ -90,6 +103,8 @@ AWS_REGION=your_aws_region
 S3_BUCKET=your_bucket_name
 LLM_MODEL=ollama/llama3
 LLM_ENDPOINT=http://localhost:11434
+COHERE_API_KEY=your_cohere_api_key
+HUGGING_FACE_TOKEN=your_huggingface_token
 ```
 
 ### 3. Frontend Setup
