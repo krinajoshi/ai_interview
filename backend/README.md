@@ -1,52 +1,85 @@
 # AI Interview Platform Backend
 
-The backend for the AI Interview Platform, built with FastAPI, MongoDB, and Hugging Face AI services.
+The backend for the AI Interview Platform, built with FastAPI, MongoDB, and multiple AI services for comprehensive interview analysis.
 
-## Using Free AI APIs
+## Using AI Services
 
-The AI Interview Platform has been redesigned to use free APIs for all AI functionality. This includes:
+The AI Interview Platform uses multiple AI services for different aspects of the interview process:
 
 1. **Language Models**: Using Hugging Face's free inference API for generating questions and evaluating answers
 2. **Speech-to-Text**: Using Hugging Face's Whisper model API for transcribing audio
+3. **Content Analysis**: Using Cohere's AI models for semantic answer evaluation
+4. **Sentiment Analysis**: Using Hugging Face's sentiment analysis model for response evaluation
 
-### Setting Up Hugging Face Integration
+### Setting Up AI Service Integration
 
-Follow these steps to set up the free AI services:
+Follow these steps to set up all required AI services:
 
-1. **Create a Hugging Face account**:
+1. **Set up Hugging Face**:
    - Sign up at [huggingface.co/join](https://huggingface.co/join)
-   - Verify your email address
-
-2. **Generate an API token**:
-   - Go to [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
-   - Click "New token" and give it a name (e.g., "AI Interview Platform")
+   - Generate an API token at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
    - Select "Read" access level
-   - Copy the generated token
+
+2. **Set up Cohere**:
+   - Sign up at [cohere.com/sign-up](https://cohere.com/sign-up)
+   - Generate an API key from your dashboard
+   - Copy the API key for configuration
 
 3. **Configure your application**:
    - Create a `.env` file in the backend root directory (copy from `.env.example`)
-   - Add your Hugging Face token:
+   - Add your API tokens:
      ```
-     HUGGINGFACE_API_TOKEN=your_token_here
+     HUGGING_FACE_TOKEN=your_huggingface_token
+     COHERE_API_KEY=your_cohere_api_key
      LLM_MODEL=huggingface/mistral
      SPEECH_TO_TEXT_PROVIDER=huggingface
      ```
 
 4. **Test the integration**:
-   - Run `python test_huggingface_integration.py` to verify LLM and speech-to-text functionality
+   - Run `python test_ai_integration.py` to verify all AI services
    - Run `python test_integrated_workflow.py` to test the complete interview workflow
+
+### Answer Analysis System
+
+The platform now features a sophisticated answer analysis system that combines multiple AI models:
+
+#### Content Relevance Analysis
+- Uses Cohere's embedding model for semantic similarity
+- Employs reranking for detailed content matching
+- Provides specific feedback on relevant and missing points
+- Identifies off-topic content
+
+#### Quality Assessment
+- Detects unclear or nonsensical responses
+- Analyzes sentence structure and complexity
+- Checks for excessive repetition
+- Evaluates answer completeness
+
+#### Feedback Generation
+- Provides point-by-point feedback on strengths
+- Lists specific areas for improvement
+- Gives honest, direct suggestions
+- Includes detailed content analysis
 
 ### Available Models
 
-The application is configured to use several Hugging Face models with automatic fallback:
+The application uses several AI models for different purposes:
 
-- **LLM Models**:
+- **LLM Models** (Question Generation):
   - Mistral-7B-Instruct (default)
   - Llama-2-7b-chat
   - Gemma-7b
   - OpenChat-3.5
   - Phi-2
   - Falcon-7B
+
+- **Sentiment Analysis**:
+  - bert-base-multilingual-uncased-sentiment
+
+- **Content Analysis**:
+  - Cohere Embed v3.0
+  - Cohere Rerank v2.0
+  - Cohere Generate
 
 - **Speech-to-Text Models**:
   - Whisper Large V3
@@ -130,6 +163,25 @@ Fixed Cross-Origin Resource Sharing to allow frontend-backend communication:
 - Added proper CORS middleware configuration
 - Allowed specific origins (localhost:3000)
 - Configured allowed methods, headers, and credentials
+
+### Answer Analysis Enhancements
+
+The answer analysis system has been significantly improved:
+
+- **Semantic Understanding**: 
+  - Implemented dual-model approach using embeddings and reranking
+  - Added detailed content relevance checking
+  - Improved accuracy of feedback generation
+
+- **Quality Assessment**:
+  - Enhanced gibberish detection
+  - Added response structure analysis
+  - Implemented better scoring system
+
+- **Feedback System**:
+  - More specific and actionable feedback
+  - Point-by-point analysis of responses
+  - Clearer improvement suggestions
 
 ## Troubleshooting
 
