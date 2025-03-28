@@ -393,7 +393,24 @@ async def analyze_sentiment(request: SentimentRequest) -> Dict[str, Any]:
                     "improvement_points": improvement_points,
                     "score": final_score,
                     "rating_explanation": get_rating_explanation(final_score),
-                    "content_analysis": content_analysis
+                    "content_analysis": {
+                        "relevance_score": relevance_data["relevance_score"] if relevance_data else 0.0,
+                        "similarity_score": relevance_data["similarity_score"] if relevance_data else 0.0,
+                        "rerank_score": relevance_data["rerank_score"] if relevance_data else 0.0,
+                        "feedback": relevance_data["feedback"] if relevance_data else {
+                            "relevant_points": [],
+                            "missing_points": [],
+                            "off_topic_content": []
+                        }
+                    } if relevance_data and not relevance_data.get("error") else None,
+                    "quality_metrics": {
+                        "has_gibberish": quality_metrics["has_gibberish"],
+                        "has_meaningful_structure": quality_metrics["has_meaningful_structure"],
+                        "avg_sentence_length": quality_metrics["avg_sentence_length"],
+                        "sentence_count": quality_metrics["sentence_count"],
+                        "excessive_repetition": quality_metrics["excessive_repetition"],
+                        "word_count": quality_metrics["word_count"]
+                    }
                 }
 
             except httpx.HTTPError as e:
