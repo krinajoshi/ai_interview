@@ -25,7 +25,11 @@ import LanguageSelector from '../../components/LanguageSelector';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
-const InterviewSetup: React.FC = () => {
+interface InterviewSetupProps {
+  onStart: () => void;
+}
+
+const InterviewSetup: React.FC<InterviewSetupProps> = ({ onStart }) => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { loading, error, selectedLanguage } = useAppSelector((state) => state.interview);
@@ -132,6 +136,10 @@ const InterviewSetup: React.FC = () => {
     } finally {
       dispatch(setLoading(false));
     }
+  };
+
+  const handleStart = () => {
+    onStart();
   };
 
   return (

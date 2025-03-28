@@ -1,45 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { Language } from '../../components/LanguageSelector';
-
-interface Answer {
-  text: string;
-  mediaUrl?: string;
-  mediaType?: 'audio' | 'video';
-  feedback?: {
-    score: number;
-    comments: string[];
-    suggestions: string[];
-  };
-}
-
-interface Question {
-  id: string;
-  text: {
-    en: string;
-    fr: string;
-    ar: string;
-  };
-  type: string;
-  context?: {
-    en: string;
-    fr: string;
-    ar: string;
-  };
-}
-
-interface InterviewState {
-  jobTitle: string;
-  resume: string | null;
-  jobDescription: string | null;
-  questions: Question[];
-  currentQuestionIndex: number;
-  answers: Record<string, Answer>;
-  loading: boolean;
-  error: string | null;
-  isInterviewStarted: boolean;
-  isInterviewComplete: boolean;
-  selectedLanguage: Language;
-}
+import { InterviewState, SetAnswerPayload, Question } from '../../types/interview';
 
 const initialState: InterviewState = {
   jobTitle: '',
@@ -47,18 +8,14 @@ const initialState: InterviewState = {
   jobDescription: null,
   questions: [],
   currentQuestionIndex: 0,
-  answers: {},
+  answers: [],
   loading: false,
   error: null,
   isInterviewStarted: false,
   isInterviewComplete: false,
   selectedLanguage: 'en',
+  language: 'en',
 };
-
-interface SetAnswerPayload {
-  questionId: string;
-  answer: Answer;
-}
 
 const interviewSlice = createSlice({
   name: 'interview',
@@ -78,17 +35,18 @@ const interviewSlice = createSlice({
     },
     setLanguage: (state, action: PayloadAction<Language>) => {
       state.selectedLanguage = action.payload;
+      state.language = action.payload;
     },
     startInterview: (state) => {
       state.isInterviewStarted = true;
       state.isInterviewComplete = false;
       state.currentQuestionIndex = 0;
-      state.answers = {};
+      state.answers = [];
       state.error = null;
     },
     setAnswer: (state, action: PayloadAction<SetAnswerPayload>) => {
-      const { questionId, answer } = action.payload;
-      state.answers[questionId] = answer;
+      const { questionIndex, answer } = action.payload;
+      state.answers[questionIndex] = answer;
     },
     nextQuestion: (state) => {
       if (state.currentQuestionIndex < state.questions.length - 1) {

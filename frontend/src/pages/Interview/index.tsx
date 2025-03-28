@@ -15,7 +15,9 @@ import {
   Alert,
   Card,
   CardContent,
+  IconButton,
 } from '@mui/material';
+import { Analytics as AnalyticsIcon } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../../store';
 import {
   setAnswer,
@@ -25,21 +27,13 @@ import {
   resetInterview,
   setLanguage,
 } from '../../features/interview/interviewSlice';
+import { Answer, Question, AIAnalysisResult } from '../../types/interview';
+import { Language } from '../../components/LanguageSelector';
 import InterviewSetup from './Setup';
 import MediaRecorder from '../../components/MediaRecorder';
-import LanguageSelector, { Language } from '../../components/LanguageSelector';
-import { analyzeAnswer, AIAnalysisResult } from '../../services/aiAnalysis';
-
-interface Answer {
-  text: string;
-  mediaUrl?: string;
-  mediaType?: 'audio' | 'video';
-  feedback?: {
-    score: number;
-    comments: string[];
-    suggestions: string[];
-  };
-}
+import LanguageSelector from '../../components/LanguageSelector';
+import { analyzeAnswer } from '../../services/aiAnalysis';
+import DetailedAnalysis from '../../components/DetailedAnalysis';
 
 const getLanguageSpecificFeedback = async (answer: Answer, questionText: string, language: Language): Promise<Answer['feedback']> => {
   try {
@@ -143,60 +137,6 @@ const getLanguageSpecificFeedback = async (answer: Answer, questionText: string,
         );
       }
 
-      // Emotion analysis (0-1 points)
-      const confidenceEmotion = analysis.emotions.find(e => e.label === 'confidence');
-      const professionalEmotion = analysis.emotions.find(e => e.label === 'neutral');
-      
-      console.log('Emotions:', { confidenceEmotion, professionalEmotion });
-      
-      if (confidenceEmotion && confidenceEmotion.score > 0.6) {
-        score += 1;
-        comments.push(
-          language === 'fr' ? 'Excellente confiance dans la réponse' :
-          language === 'ar' ? 'ثقة ممتازة في الإجابة' :
-          'Excellent confidence in the response'
-        );
-      } else if (professionalEmotion && professionalEmotion.score > 0.6) {
-        score += 0.8;
-        comments.push(
-          language === 'fr' ? 'Ton professionnel approprié' :
-          language === 'ar' ? 'نبرة مهنية مناسبة' :
-          'Appropriate professional tone'
-        );
-      }
-
-      // Question relevance analysis (0-1 points)
-      if (wordCount > 0) {
-        const questionKeywords = questionText.toLowerCase().split(/\s+/).filter(word => word.length > 3);
-        const answerWords = answer.text.toLowerCase().split(/\s+/);
-        const relevantKeywordsCount = questionKeywords.filter(keyword => 
-          answerWords.some(word => word.includes(keyword) || keyword.includes(word))
-        ).length;
-        const relevanceScore = relevantKeywordsCount / Math.max(1, questionKeywords.length);
-
-        console.log('Relevance analysis:', {
-          questionKeywords,
-          answerWords,
-          relevantKeywordsCount,
-          relevanceScore
-        });
-
-        if (relevanceScore >= 0.5) {
-          score += 1;
-          comments.push(
-            language === 'fr' ? 'Réponse bien alignée avec la question' :
-            language === 'ar' ? 'الإجابة متوافقة جيداً مع السؤال' :
-            'Response well-aligned with the question'
-          );
-        } else if (relevanceScore < 0.3) {
-          suggestions.push(
-            language === 'fr' ? 'Assurez-vous que votre réponse aborde directement la question posée' :
-            language === 'ar' ? 'تأكد من أن إجابتك تتناول السؤال المطروح مباشرة' :
-            'Ensure your answer directly addresses the question asked'
-          );
-        }
-      }
-
       // Media response bonus (0-1 point)
       if (analysis.transcription) {
         console.log('Transcription analysis:', { transcription: analysis.transcription });
@@ -276,34 +216,27 @@ const Interview: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [showDetailedAnalysis, setShowDetailedAnalysis] = React.useState(false);
+  const [currentAnalysis, setCurrentAnalysis] = React.useState<AIAnalysisResult | null>(null);
+
   const {
     questions,
     currentQuestionIndex,
     answers,
-    loading,
-    error,
     isInterviewStarted,
     isInterviewComplete,
+    language: selectedLanguage,
     jobTitle,
-    selectedLanguage,
   } = useAppSelector((state) => state.interview);
 
   const [currentAnswer, setCurrentAnswer] = React.useState<Answer>({ text: '' });
 
-  // Debug logging
   React.useEffect(() => {
-    console.log('Interview state:', {
-      questions,
-      currentQuestionIndex,
-      isInterviewStarted,
-      isInterviewComplete,
-    });
-  }, [questions, currentQuestionIndex, isInterviewStarted, isInterviewComplete]);
-
-  React.useEffect(() => {
-    if (isInterviewStarted && questions.length > 0) {
-      const currentQuestionId = questions[currentQuestionIndex]?.id;
-      setCurrentAnswer(answers[currentQuestionId] || { text: '' });
+    if (isInterviewStarted && questions.length > 0 && currentQuestionIndex >= 0) {
+      const answer = answers[currentQuestionIndex];
+      setCurrentAnswer(answer || { text: '' });
     }
   }, [currentQuestionIndex, questions, answers, isInterviewStarted]);
 
@@ -330,8 +263,176 @@ const Interview: React.FC = () => {
     navigate('/dashboard');
   };
 
+  const handleStartInterview = () => {
+    dispatch(setLanguage(selectedLanguage));
+    dispatch(resetInterview());
+  };
+
+  const handleSubmitFeedback = async (answer: Answer, questionIndex: number) => {
+    try {
+      dispatch(setAnswer({ answer, questionIndex }));
+      
+      if (questionIndex < questions.length - 1) {
+        dispatch(nextQuestion());
+      } else {
+        await handleCompleteInterview();
+      }
+    } catch (err) {
+      console.error('Error submitting feedback:', err);
+      setError('Failed to submit feedback. Please try again.');
+    }
+  };
+
+  const handleRetryQuestion = () => {
+    const currentAnswer = answers[currentQuestionIndex];
+    if (!currentAnswer) return;
+
+    dispatch(setAnswer({ 
+      answer: { ...currentAnswer, feedback: undefined }, 
+      questionIndex: currentQuestionIndex 
+    }));
+  };
+
+  const handleCompleteInterview = async () => {
+    try {
+      const simplifiedQuestions = questions.map((q: Question) => ({
+        id: q.id,
+        text: q.text[selectedLanguage],
+        type: q.type
+      }));
+
+      // Save to localStorage before completing
+      const interviewData = {
+        jobTitle,
+        questions: simplifiedQuestions,
+        answers: answers.map((answer: Answer, index: number) => ({
+          questionIndex: index,
+          text: answer.text,
+          mediaUrl: answer.mediaUrl,
+          mediaType: answer.mediaType,
+          feedback: answer.feedback
+        })),
+        completedAt: new Date().toISOString(),
+        language: selectedLanguage
+      };
+      localStorage.setItem('lastInterview', JSON.stringify(interviewData));
+
+      dispatch(completeInterview());
+      navigate('/dashboard');
+    } catch (err) {
+      console.error('Error completing interview:', err);
+      setError('Failed to complete interview. Please try again.');
+    }
+  };
+
+  const handlePreviousQuestion = () => {
+    dispatch(previousQuestion());
+  };
+
+  const handleNext = async () => {
+    const currentQuestion = questions[currentQuestionIndex];
+    
+    // Analyze the answer with language-specific feedback
+    const feedback = await getLanguageSpecificFeedback(
+      currentAnswer, 
+      currentQuestion.text[selectedLanguage],
+      selectedLanguage
+    );
+    
+    const answerWithFeedback = {
+      ...currentAnswer,
+      feedback
+    };
+
+    // Save the current answer
+    dispatch(setAnswer({ 
+      answer: answerWithFeedback,
+      questionIndex: currentQuestionIndex 
+    }));
+
+    if (currentQuestionIndex < questions.length - 1) {
+      dispatch(nextQuestion());
+    } else {
+      // Transform questions to match Dashboard's expected format
+      const simplifiedQuestions = questions.map(q => ({
+        id: q.id,
+        text: q.text[selectedLanguage],
+        type: q.type
+      }));
+
+      // Save to localStorage before completing
+      const interviewData = {
+        jobTitle,
+        questions: simplifiedQuestions,
+        answers: answers.map((answer, index) => ({
+          questionIndex: index,
+          ...answer
+        })),
+        completedAt: new Date().toISOString(),
+        language: selectedLanguage
+      };
+      const pastInterviews = JSON.parse(localStorage.getItem('pastInterviews') || '[]');
+      pastInterviews.push(interviewData);
+      localStorage.setItem('pastInterviews', JSON.stringify(pastInterviews));
+
+      // Complete the interview and navigate to dashboard
+      dispatch(completeInterview());
+    }
+  };
+
+  const handlePrevious = () => {
+    const currentQuestion = questions[currentQuestionIndex];
+    dispatch(setAnswer({ 
+      answer: currentAnswer,
+      questionIndex: currentQuestionIndex 
+    }));
+    dispatch(previousQuestion());
+  };
+
+  const handleSaveAndReturn = () => {
+    dispatch(resetInterview());
+    navigate('/dashboard');
+  };
+
+  const handleAnalyzeClick = async () => {
+    if (currentQuestionIndex < 0 || currentQuestionIndex >= answers.length) return;
+    
+    const currentAnswer = answers[currentQuestionIndex];
+    if (!currentAnswer) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      if (currentQuestionIndex < 0 || currentQuestionIndex >= questions.length) return;
+      
+      const currentQuestion = questions[currentQuestionIndex];
+      if (!currentQuestion) return;
+
+      const analysis = await analyzeAnswer(
+        currentAnswer.text,
+        currentAnswer.mediaUrl,
+        currentAnswer.mediaType,
+        currentQuestion.text[selectedLanguage as keyof typeof currentQuestion.text]
+      );
+      setCurrentAnalysis(analysis);
+      setShowDetailedAnalysis(true);
+    } catch (err) {
+      setError('Failed to analyze answer. Please try again.');
+      console.error('Analysis error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!isInterviewStarted) {
-    return <InterviewSetup />;
+    return (
+      <Container maxWidth="md">
+        <Box sx={{ mt: 4 }}>
+          <InterviewSetup onStart={handleStartInterview} />
+        </Box>
+      </Container>
+    );
   }
 
   if (questions.length === 0) {
@@ -374,71 +475,6 @@ const Interview: React.FC = () => {
       mediaUrl,
       mediaType: type
     }));
-  };
-
-  const handleNext = async () => {
-    const currentQuestion = questions[currentQuestionIndex];
-    
-    // Analyze the answer with language-specific feedback
-    const feedback = await getLanguageSpecificFeedback(
-      currentAnswer, 
-      currentQuestion.text[selectedLanguage],
-      selectedLanguage
-    );
-    
-    const answerWithFeedback = {
-      ...currentAnswer,
-      feedback
-    };
-
-    // Save the current answer
-    dispatch(setAnswer({ 
-      questionId: currentQuestion.id, 
-      answer: answerWithFeedback 
-    }));
-
-    if (currentQuestionIndex < questions.length - 1) {
-      dispatch(nextQuestion());
-    } else {
-      // Transform questions to match Dashboard's expected format
-      const simplifiedQuestions = questions.map(q => ({
-        id: q.id,
-        text: q.text[selectedLanguage], // Use the current language's text
-        type: q.type
-      }));
-
-      // Save to localStorage before completing
-      const interviewData = {
-        jobTitle,
-        questions: simplifiedQuestions,
-        answers: {
-          ...answers,
-          [currentQuestion.id]: answerWithFeedback // Include the last answer
-        },
-        completedAt: new Date().toISOString(),
-        language: selectedLanguage,
-      };
-      const pastInterviews = JSON.parse(localStorage.getItem('pastInterviews') || '[]');
-      pastInterviews.push(interviewData);
-      localStorage.setItem('pastInterviews', JSON.stringify(pastInterviews));
-
-      // Complete the interview and navigate to dashboard
-      dispatch(completeInterview());
-    }
-  };
-
-  const handlePrevious = () => {
-    const currentQuestion = questions[currentQuestionIndex];
-    dispatch(setAnswer({ 
-      questionId: currentQuestion.id, 
-      answer: currentAnswer 
-    }));
-    dispatch(previousQuestion());
-  };
-
-  const handleSaveAndReturn = () => {
-    dispatch(resetInterview());
-    navigate('/dashboard');
   };
 
   if (isInterviewComplete) {
@@ -623,8 +659,33 @@ const Interview: React.FC = () => {
                  'Next Question')}
             </Button>
           </Box>
+
+          {/* Add Analysis Button */}
+          {answers[currentQuestionIndex]?.text && (
+            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
+              <Button
+                variant="outlined"
+                color="primary"
+                onClick={handleAnalyzeClick}
+                startIcon={<AnalyticsIcon />}
+                disabled={loading}
+              >
+                {loading ? 'Analyzing...' : 'View Detailed Analysis'}
+              </Button>
+            </Box>
+          )}
         </Paper>
       </Box>
+
+      {/* Detailed Analysis Dialog */}
+      {currentAnalysis && (
+        <DetailedAnalysis
+          open={showDetailedAnalysis}
+          onClose={() => setShowDetailedAnalysis(false)}
+          analysis={currentAnalysis}
+          question={questions[currentQuestionIndex].text[selectedLanguage]}
+        />
+      )}
     </Container>
   );
 };

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { AIAnalysisResult } from '../types/interview';
 
 // Validate environment variables
 console.log('Environment check:', {
@@ -6,34 +7,10 @@ console.log('Environment check:', {
   apiUrl: process.env.REACT_APP_API_URL
 });
 
-interface SentimentAnalysis {
-  label: string;
-  score: number;
-  star_rating?: number;
-  confidence?: number;
-}
-
-interface EmotionAnalysis {
-  label: string;
-  score: number;
-}
-
-export interface AIAnalysisResult {
-  sentiment: SentimentAnalysis;
-  emotions: EmotionAnalysis[];
-  feedback: string[];
-  improvement_points: string[];
-  confidence: number;
-  transcription?: string;
-  score?: number;
-  rating_explanation?: string;
-  error?: string;
-}
-
 // API endpoints
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 const SENTIMENT_API_URL = `${API_BASE_URL}/api/v1/sentiment/analyze`;
-const TRANSCRIPTION_API_URL = `${API_BASE_URL}/api/v1/transcription/analyze`;
+const TRANSCRIPTION_API_URL = `${API_BASE_URL}/api/v1/transcription/transcribe`;
 
 // Add retry logic
 const MAX_RETRIES = 3;
@@ -109,31 +86,75 @@ async function analyzeSentiment(text: string, question?: string): Promise<any> {
 
 async function blobUrlToFile(blobUrl: string, mediaType: 'audio' | 'video'): Promise<File> {
   try {
+    console.log('Converting blob URL to file:', {
+      blobUrl: blobUrl.substring(0, 50) + '...',
+      mediaType
+    });
+
     const response = await fetch(blobUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch blob: ${response.status} ${response.statusText}`);
+    }
+
     const blob = await response.blob();
-    
-    // Get the correct file extension based on media type and content type
+    console.log('Blob details:', {
+      size: blob.size,
+      type: blob.type,
+      mediaType
+    });
+
+    if (blob.size === 0) {
+      throw new Error('Received empty blob');
+    }
+
+    // Get the correct file extension and MIME type based on media type and content type
     let extension = '';
-    if (blob.type.includes('webm')) {
-      extension = '.webm';
-    } else if (blob.type.includes('mp4')) {
-      extension = '.mp4';
-    } else if (blob.type.includes('wav')) {
-      extension = '.wav';
-    } else if (mediaType === 'audio') {
-      extension = '.mp3';
+    let mimeType = blob.type;
+
+    // If blob type is empty or generic, set it based on media type
+    if (!blob.type || blob.type === 'application/octet-stream') {
+      if (mediaType === 'audio') {
+        mimeType = 'audio/wav';
+        extension = '.wav';
+      } else {
+        mimeType = 'video/mp4';
+        extension = '.mp4';
+      }
     } else {
-      extension = '.mp4';
+      // Set extension based on actual blob type
+      if (blob.type.includes('webm')) {
+        extension = '.webm';
+      } else if (blob.type.includes('mp4')) {
+        extension = '.mp4';
+      } else if (blob.type.includes('wav')) {
+        extension = '.wav';
+      } else if (blob.type.includes('mp3')) {
+        extension = '.mp3';
+      } else {
+        // Default to wav for audio and mp4 for video
+        extension = mediaType === 'audio' ? '.wav' : '.mp4';
+      }
     }
     
     // Create a new filename with timestamp to avoid caching issues
     const timestamp = new Date().getTime();
     const filename = `recording_${timestamp}${extension}`;
     
-    return new File([blob], filename, { type: blob.type });
-  } catch (error) {
-    console.error('Error converting blob URL to file:', error);
-    throw error;
+    // Create the file with the correct MIME type
+    const file = new File([blob], filename, { type: mimeType });
+    
+    console.log('Created file:', {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      extension,
+      mimeType
+    });
+
+    return file;
+  } catch (error: any) {
+    console.error('Error in blobUrlToFile:', error);
+    throw new Error(`Failed to convert blob URL to file: ${error.message}`);
   }
 }
 
@@ -149,13 +170,28 @@ async function transcribeMedia(mediaUrl: string, mediaType: 'audio' | 'video'): 
       size: mediaFile.size
     });
     
+    // Validate file before upload
+    if (mediaFile.size === 0) {
+      throw new Error('File is empty');
+    }
+
+    if (mediaFile.size > 10 * 1024 * 1024) { // 10MB limit
+      throw new Error('File is too large. Please keep recordings under 10MB.');
+    }
+    
     // Create FormData and append the file
     const formData = new FormData();
     formData.append('file', mediaFile);
     formData.append('media_type', mediaType);
     
     const response = await retry(async () => {
-      console.log('Sending media file to backend...');
+      console.log('Sending media file to backend...', {
+        fileName: mediaFile.name,
+        fileType: mediaFile.type,
+        fileSize: mediaFile.size,
+        mediaType
+      });
+
       const result = await axios.post(
         TRANSCRIPTION_API_URL,
         formData,
@@ -177,83 +213,120 @@ async function transcribeMedia(mediaUrl: string, mediaType: 'audio' | 'video'): 
 
     return response.data.transcription || '';
   } catch (error: any) {
-    console.error('Transcription error:', error);
+    console.error('Transcription error:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status
+    });
     const errorMessage = error.response?.data?.message || error.message || 'Error transcribing audio';
     throw new Error(errorMessage);
   }
 }
 
-export async function analyzeAnswer(
+export const analyzeAnswer = async (
   text: string,
   mediaUrl?: string,
   mediaType?: 'audio' | 'video',
   question?: string
-): Promise<AIAnalysisResult> {
-  console.log('Starting answer analysis with:', { text, mediaUrl, mediaType, question });
-  
+): Promise<AIAnalysisResult> => {
   try {
-    // Handle media transcription if provided
     let transcription: string | undefined;
-    let transcriptionError: string | undefined;
     
+    console.log('analyzeAnswer called with:', {
+      text: text.substring(0, 100),
+      mediaUrl: mediaUrl ? 'present' : 'absent',
+      mediaType,
+      question
+    });
+    
+    // If media URL is provided, transcribe it first
     if (mediaUrl && mediaType) {
       try {
+        console.log('Starting media transcription...');
         transcription = await transcribeMedia(mediaUrl, mediaType);
-        console.log('Transcription result:', transcription);
-      } catch (error: any) {
+        console.log('Transcription completed:', transcription?.substring(0, 100));
+      } catch (error) {
         console.error('Transcription failed:', error);
-        transcriptionError = error.message;
-        // Continue with text analysis even if transcription fails
+        // Continue with analysis even if transcription fails
       }
     }
 
-    // Analyze both text and transcription if available
-    const textToAnalyze = transcription 
-      ? `${text}\n\nTranscribed content: ${transcription}`
-      : text;
+    // Send both text and transcription for analysis
+    const response = await retry(async () => {
+      console.log('Sending analysis request with:', {
+        text: text.substring(0, 100),
+        transcription: transcription?.substring(0, 100),
+        question,
+        mediaUrl: mediaUrl ? 'present' : 'absent',
+        mediaType
+      });
 
-    const analysisResult = await analyzeSentiment(textToAnalyze, question);
-    
-    // Calculate confidence based on sentiment score
-    const confidence = analysisResult.sentiment.confidence || analysisResult.sentiment.score;
+      const result = await axios.post(SENTIMENT_API_URL, {
+        text,
+        question,
+        transcription
+      }, {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000 // 30 second timeout
+      });
 
-    // Map emotions based on sentiment
-    const emotions: EmotionAnalysis[] = [
-      { 
-        label: analysisResult.sentiment.label.toLowerCase(),
-        score: analysisResult.sentiment.score
+      console.log('Raw API response:', result.data);
+      return result;
+    });
+
+    // Log the response data before transformation
+    console.log('API response data:', {
+      sentiment: response.data.sentiment,
+      hasTranscription: !!response.data.transcription,
+      hasContentAnalysis: !!response.data.content_analysis,
+      hasQualityMetrics: !!response.data.quality_metrics,
+      feedback: response.data.feedback?.length,
+      improvementPoints: response.data.improvement_points?.length
+    });
+
+    // Validate and transform the response
+    const analysisResult: AIAnalysisResult = {
+      sentiment: {
+        label: response.data.sentiment.label || 'NEUTRAL',
+        score: response.data.sentiment.score || 0.5
       },
-      {
-        label: 'confidence',
-        score: confidence
-      }
-    ];
+      transcription: transcription || response.data.transcription,
+      content_analysis: response.data.content_analysis ? {
+        relevance_score: response.data.content_analysis.relevance_score || 0,
+        similarity_score: response.data.content_analysis.similarity_score || 0,
+        rerank_score: response.data.content_analysis.rerank_score || 0,
+        feedback: {
+          relevant_points: response.data.content_analysis.feedback?.relevant_points || [],
+          missing_points: response.data.content_analysis.feedback?.missing_points || [],
+          off_topic_content: response.data.content_analysis.feedback?.off_topic_content || []
+        }
+      } : undefined,
+      quality_metrics: response.data.quality_metrics ? {
+        has_gibberish: response.data.quality_metrics.has_gibberish || false,
+        has_meaningful_structure: response.data.quality_metrics.has_meaningful_structure || false,
+        avg_sentence_length: response.data.quality_metrics.avg_sentence_length || 0,
+        sentence_count: response.data.quality_metrics.sentence_count || 0,
+        excessive_repetition: response.data.quality_metrics.excessive_repetition || false,
+        word_count: response.data.quality_metrics.word_count || 0
+      } : undefined,
+      score: response.data.score || 0,
+      feedback: response.data.feedback || [],
+      improvement_points: response.data.improvement_points || []
+    };
 
-    return {
-      sentiment: analysisResult.sentiment,
-      emotions,
-      feedback: analysisResult.feedback || [],
-      improvement_points: analysisResult.improvement_points || [],
-      confidence,
-      transcription,
-      score: analysisResult.score,
-      rating_explanation: analysisResult.rating_explanation,
-      error: transcriptionError // Include any transcription error in the response
-    };
-  } catch (error: any) {
-    console.error('Analysis failed:', error);
-    return {
-      sentiment: { label: 'NEUTRAL', score: 0.5 },
-      emotions: [
-        { label: 'neutral', score: 0.5 },
-        { label: 'confidence', score: 0.5 }
-      ],
-      feedback: ['Error analyzing your answer. Please try again.'],
-      improvement_points: ['If the error persists, try rephrasing your answer'],
-      confidence: 0.5,
-      score: 3,
-      rating_explanation: 'Unable to provide accurate rating due to analysis error',
-      error: error.message
-    };
+    console.log('Transformed analysis result:', {
+      hasTranscription: !!analysisResult.transcription,
+      hasContentAnalysis: !!analysisResult.content_analysis,
+      hasQualityMetrics: !!analysisResult.quality_metrics,
+      feedback: analysisResult.feedback.length,
+      improvementPoints: analysisResult.improvement_points.length
+    });
+
+    return analysisResult;
+  } catch (error) {
+    console.error('Error analyzing answer:', error);
+    throw new Error('Failed to analyze answer');
   }
-} 
+}; 
