@@ -1,6 +1,6 @@
-import * as React from 'react';
-import { useTranslation } from 'react-i18next';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Container,
   Box,
@@ -16,8 +16,23 @@ import {
   Card,
   CardContent,
   IconButton,
+  useTheme,
+  alpha,
+  Grid,
+  Fade,
+  Tooltip,
+  Chip,
 } from '@mui/material';
-import { Analytics as AnalyticsIcon } from '@mui/icons-material';
+import {
+  Analytics as AnalyticsIcon,
+  ArrowBack,
+  ArrowForward,
+  Save,
+  Refresh,
+  Check,
+  Timer,
+  QuestionAnswer,
+} from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../../store';
 import {
   setAnswer,
@@ -27,8 +42,7 @@ import {
   resetInterview,
   setLanguage,
 } from '../../features/interview/interviewSlice';
-import { Answer, Question, AIAnalysisResult } from '../../types/interview';
-import { Language } from '../../components/LanguageSelector';
+import { Answer, Question, AIAnalysisResult, Language } from '../../types/interview';
 import InterviewSetup from './Setup';
 import MediaRecorder from '../../components/MediaRecorder';
 import LanguageSelector from '../../components/LanguageSelector';
@@ -38,7 +52,7 @@ import DetailedAnalysis from '../../components/DetailedAnalysis';
 const getLanguageSpecificFeedback = async (answer: Answer, questionText: string, language: Language): Promise<Answer['feedback']> => {
   try {
     // Check for empty answer
-    if (!answer.text.trim() && !answer.mediaUrl) {
+    if (!answer.text?.trim() && !answer.mediaUrl) {
       return {
         score: 0,
         comments: [],
@@ -53,7 +67,12 @@ const getLanguageSpecificFeedback = async (answer: Answer, questionText: string,
     // Get AI analysis of the answer
     let analysis;
     try {
-      analysis = await analyzeAnswer(answer.text, answer.mediaUrl, answer.mediaType);
+      analysis = await analyzeAnswer(
+        answer.text || '',
+        answer.mediaUrl || '',
+        answer.mediaType || 'text',
+        questionText
+      );
       console.log('Full analysis results:', analysis);
     } catch (error) {
       console.error('Analysis failed:', error);
@@ -76,7 +95,7 @@ const getLanguageSpecificFeedback = async (answer: Answer, questionText: string,
     let score = 0;
     
     // Content length analysis (0-1 points)
-    const wordCount = answer.text.trim().split(/\s+/).length;
+    const wordCount = (answer.text || '').trim().split(/\s+/).length;
     console.log('Word count:', wordCount);
 
     if (wordCount === 0) {
@@ -113,22 +132,22 @@ const getLanguageSpecificFeedback = async (answer: Answer, questionText: string,
     // Only proceed with sentiment and emotion analysis if we have actual content
     if ((wordCount > 0 || answer.mediaUrl) && analysis) {
       // Sentiment analysis (0-2 points)
-      console.log('Sentiment score:', analysis.sentiment.score);
-      if (analysis.sentiment.score >= 0.8) {
+      console.log('Sentiment score:', analysis.sentimentScore);
+      if (analysis.sentimentScore >= 0.8) {
         score += 2;
         comments.push(
           language === 'fr' ? 'Excellent ton professionnel et positif' :
           language === 'ar' ? 'نبرة مهنية وإيجابية ممتازة' :
           'Excellent professional and positive tone'
         );
-      } else if (analysis.sentiment.score >= 0.6) {
+      } else if (analysis.sentimentScore >= 0.6) {
         score += 1.5;
         comments.push(
           language === 'fr' ? 'Bon ton professionnel' :
           language === 'ar' ? 'نبرة مهنية جيدة' :
           'Good professional tone'
         );
-      } else if (analysis.sentiment.score < 0.4) {
+      } else if (analysis.sentimentScore < 0.4) {
         score += 0.5;
         suggestions.push(
           language === 'fr' ? 'Adoptez un ton plus positif et professionnel' :
@@ -148,32 +167,47 @@ const getLanguageSpecificFeedback = async (answer: Answer, questionText: string,
         );
         
         // Check consistency between text and transcription
-        if (answer.text.length > 0 && analysis.transcription.length > 0) {
-          try {
-            const textSentiment = await analyzeAnswer(answer.text);
-            const transcriptionSentiment = await analyzeAnswer(analysis.transcription);
-            
-            console.log('Consistency analysis:', {
-              textSentiment,
-              transcriptionSentiment
-            });
+        if (answer.text && analysis.transcription) {
+          const textLength = answer.text.length;
+          const transcriptionLength = analysis.transcription.length;
+          
+          if (textLength > 0 && transcriptionLength > 0) {
+            try {
+              const textSentiment = await analyzeAnswer(
+                answer.text,
+                '',
+                'text',
+                questionText
+              );
+              const transcriptionSentiment = await analyzeAnswer(
+                analysis.transcription,
+                '',
+                'text',
+                questionText
+              );
+              
+              console.log('Consistency analysis:', {
+                textSentiment,
+                transcriptionSentiment
+              });
 
-            if (Math.abs(textSentiment.sentiment.score - transcriptionSentiment.sentiment.score) < 0.2) {
-              score += 0.5;
-              comments.push(
-                language === 'fr' ? 'Bonne cohérence entre réponses écrites et orales' :
-                language === 'ar' ? 'تناسق جيد بين الإجابات المكتوبة والشفهية' :
-                'Good consistency between written and spoken responses'
-              );
-            } else {
-              suggestions.push(
-                language === 'fr' ? 'Veillez à maintenir la même qualité dans vos réponses écrites et orales' :
-                language === 'ar' ? 'احرص على الحفاظ على نفس الجودة في إجاباتك المكتوبة والشفهية' :
-                'Maintain consistent quality in both written and spoken responses'
-              );
+              if (Math.abs(textSentiment.sentimentScore - transcriptionSentiment.sentimentScore) < 0.2) {
+                score += 0.5;
+                comments.push(
+                  language === 'fr' ? 'Bonne cohérence entre réponses écrites et orales' :
+                  language === 'ar' ? 'تناسق جيد بين الإجابات المكتوبة والشفهية' :
+                  'Good consistency between written and spoken responses'
+                );
+              } else {
+                suggestions.push(
+                  language === 'fr' ? 'Veillez à maintenir la même qualité dans vos réponses écrites et orales' :
+                  language === 'ar' ? 'احرص على الحفاظ على نفس الجودة في إجاباتك المكتوبة والشفهية' :
+                  'Maintain consistent quality in both written and spoken responses'
+                );
+              }
+            } catch (error) {
+              console.error('Error analyzing consistency:', error);
             }
-          } catch (error) {
-            console.error('Error analyzing consistency:', error);
           }
         }
       }
@@ -212,479 +246,368 @@ const getLanguageSpecificFeedback = async (answer: Answer, questionText: string,
   }
 };
 
+const formatTime = (seconds: number): string => {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
+
+  const parts = [];
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0) parts.push(`${minutes}m`);
+  parts.push(`${remainingSeconds}s`);
+
+  return parts.join(' ');
+};
+
 const Interview: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [showDetailedAnalysis, setShowDetailedAnalysis] = React.useState(false);
-  const [currentAnalysis, setCurrentAnalysis] = React.useState<AIAnalysisResult | null>(null);
-
+  const theme = useTheme();
+  
+  const [isRecording, setIsRecording] = useState(false);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  
   const {
     questions,
     currentQuestionIndex,
     answers,
+    language,
     isInterviewStarted,
-    isInterviewComplete,
-    language: selectedLanguage,
-    jobTitle,
   } = useAppSelector((state) => state.interview);
 
-  const [currentAnswer, setCurrentAnswer] = React.useState<Answer>({ text: '' });
+  const currentQuestion = questions[currentQuestionIndex];
+  const currentAnswer = answers[currentQuestionIndex];
 
-  React.useEffect(() => {
-    if (isInterviewStarted && questions.length > 0 && currentQuestionIndex >= 0) {
-      const answer = answers[currentQuestionIndex];
-      setCurrentAnswer(answer || { text: '' });
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isInterviewStarted) {
+      interval = setInterval(() => {
+        setElapsedTime((prev) => prev + 1);
+      }, 1000);
     }
-  }, [currentQuestionIndex, questions, answers, isInterviewStarted]);
+    return () => clearInterval(interval);
+  }, [isInterviewStarted]);
 
-  // Add effect to handle interview completion
-  React.useEffect(() => {
-    if (isInterviewComplete) {
-      console.log('Interview complete, language:', selectedLanguage);
-      // Add a small delay to show the completion message before redirecting
-      const timer = setTimeout(() => {
-        console.log('Redirecting to dashboard...');
-        dispatch(resetInterview());
-        navigate('/dashboard');
-      }, 2000); // 2 second delay
-      return () => clearTimeout(timer);
-    }
-  }, [isInterviewComplete, navigate, dispatch, selectedLanguage]);
-
-  const handleLanguageChange = (lang: Language) => {
-    dispatch(setLanguage(lang));
-  };
-
-  const handleBack = () => {
-    dispatch(resetInterview());
-    navigate('/dashboard');
-  };
-
-  const handleStartInterview = () => {
-    dispatch(setLanguage(selectedLanguage));
-    dispatch(resetInterview());
-  };
-
-  const handleSubmitFeedback = async (answer: Answer, questionIndex: number) => {
-    try {
-      dispatch(setAnswer({ answer, questionIndex }));
-      
-      if (questionIndex < questions.length - 1) {
-        dispatch(nextQuestion());
-      } else {
-        await handleCompleteInterview();
-      }
-    } catch (err) {
-      console.error('Error submitting feedback:', err);
-      setError('Failed to submit feedback. Please try again.');
-    }
-  };
-
-  const handleRetryQuestion = () => {
-    const currentAnswer = answers[currentQuestionIndex];
-    if (!currentAnswer) return;
-
-    dispatch(setAnswer({ 
-      answer: { ...currentAnswer, feedback: undefined }, 
-      questionIndex: currentQuestionIndex 
-    }));
-  };
-
-  const handleCompleteInterview = async () => {
-    try {
-      const simplifiedQuestions = questions.map((q: Question) => ({
-        id: q.id,
-        text: q.text[selectedLanguage],
-        type: q.type
-      }));
-
-      // Save to localStorage before completing
-      const interviewData = {
-        jobTitle,
-        questions: simplifiedQuestions,
-        answers: answers.map((answer: Answer, index: number) => ({
-          questionIndex: index,
-          text: answer.text,
-          mediaUrl: answer.mediaUrl,
-          mediaType: answer.mediaType,
-          feedback: answer.feedback
-        })),
-        completedAt: new Date().toISOString(),
-        language: selectedLanguage
-      };
-      localStorage.setItem('lastInterview', JSON.stringify(interviewData));
-
-      dispatch(completeInterview());
-      navigate('/dashboard');
-    } catch (err) {
-      console.error('Error completing interview:', err);
-      setError('Failed to complete interview. Please try again.');
-    }
-  };
-
-  const handlePreviousQuestion = () => {
-    dispatch(previousQuestion());
+  const handleLanguageChange = (newLanguage: Language) => {
+    dispatch(setLanguage(newLanguage));
   };
 
   const handleNext = async () => {
-    const currentQuestion = questions[currentQuestionIndex];
-    
-    // Analyze the answer with language-specific feedback
-    const feedback = await getLanguageSpecificFeedback(
-      currentAnswer, 
-      currentQuestion.text[selectedLanguage],
-      selectedLanguage
-    );
-    
-    const answerWithFeedback = {
-      ...currentAnswer,
-      feedback
-    };
-
-    // Save the current answer
-    dispatch(setAnswer({ 
-      answer: answerWithFeedback,
-      questionIndex: currentQuestionIndex 
-    }));
-
-    if (currentQuestionIndex < questions.length - 1) {
-      dispatch(nextQuestion());
-    } else {
-      // Transform questions to match Dashboard's expected format
-      const simplifiedQuestions = questions.map(q => ({
-        id: q.id,
-        text: q.text[selectedLanguage],
-        type: q.type
-      }));
-
-      // Save to localStorage before completing
-      const interviewData = {
-        jobTitle,
-        questions: simplifiedQuestions,
-        answers: answers.map((answer, index) => ({
-          questionIndex: index,
-          ...answer
-        })),
-        completedAt: new Date().toISOString(),
-        language: selectedLanguage
-      };
-      const pastInterviews = JSON.parse(localStorage.getItem('pastInterviews') || '[]');
-      pastInterviews.push(interviewData);
-      localStorage.setItem('pastInterviews', JSON.stringify(pastInterviews));
-
-      // Complete the interview and navigate to dashboard
-      dispatch(completeInterview());
+    if (currentAnswer?.text || currentAnswer?.mediaUrl) {
+      setIsLoading(true);
+      try {
+        const analysis = await analyzeAnswer(
+          currentAnswer.text || '',
+          currentAnswer.mediaUrl || '',
+          currentAnswer.mediaType || 'text',
+          currentQuestion?.text || ''
+        );
+        dispatch(setAnswer({
+          questionIndex: currentQuestionIndex,
+          answer: { ...currentAnswer, analysis }
+        }));
+        dispatch(nextQuestion());
+      } catch (error) {
+        console.error('Analysis failed:', error);
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
   const handlePrevious = () => {
-    const currentQuestion = questions[currentQuestionIndex];
-    dispatch(setAnswer({ 
-      answer: currentAnswer,
-      questionIndex: currentQuestionIndex 
-    }));
     dispatch(previousQuestion());
   };
 
-  const handleSaveAndReturn = () => {
-    dispatch(resetInterview());
-    navigate('/dashboard');
+  const handleRetryQuestion = () => {
+    dispatch(setAnswer({
+      questionIndex: currentQuestionIndex,
+      answer: { text: '', mediaUrl: null, mediaType: null }
+    }));
   };
 
-  const handleAnalyzeClick = async () => {
-    if (currentQuestionIndex < 0 || currentQuestionIndex >= answers.length) return;
-    
-    const currentAnswer = answers[currentQuestionIndex];
-    if (!currentAnswer) return;
+  const handleCompleteInterview = async () => {
+    if (currentAnswer?.text || currentAnswer?.mediaUrl) {
+      setIsLoading(true);
+      try {
+        const analysis = await analyzeAnswer(
+          currentAnswer.text || '',
+          currentAnswer.mediaUrl || '',
+          currentAnswer.mediaType || 'text',
+          currentQuestion?.text || ''
+        );
+        dispatch(setAnswer({
+          questionIndex: currentQuestionIndex,
+          answer: { ...currentAnswer, analysis }
+        }));
+        dispatch(completeInterview());
+        navigate('/dashboard');
+      } catch (error) {
+        console.error('Analysis failed:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
 
-    setLoading(true);
-    setError(null);
+  const handleAnswerChange = (text: string) => {
+    dispatch(setAnswer({
+      questionIndex: currentQuestionIndex,
+      answer: { ...currentAnswer, text }
+    }));
+  };
 
-    try {
-      if (currentQuestionIndex < 0 || currentQuestionIndex >= questions.length) return;
-      
-      const currentQuestion = questions[currentQuestionIndex];
-      if (!currentQuestion) return;
-
-      const analysis = await analyzeAnswer(
-        currentAnswer.text,
-        currentAnswer.mediaUrl,
-        currentAnswer.mediaType,
-        currentQuestion.text[selectedLanguage as keyof typeof currentQuestion.text]
-      );
-      setCurrentAnalysis(analysis);
-      setShowDetailedAnalysis(true);
-    } catch (err) {
-      setError('Failed to analyze answer. Please try again.');
-      console.error('Analysis error:', err);
-    } finally {
-      setLoading(false);
+  const handleMediaRecordingComplete = (mediaBlob: Blob | null, type: 'audio' | 'video' | null) => {
+    if (mediaBlob) {
+      const url = URL.createObjectURL(mediaBlob);
+      dispatch(setAnswer({
+        questionIndex: currentQuestionIndex,
+        answer: { ...currentAnswer, mediaUrl: url, mediaType: type }
+      }));
     }
   };
 
   if (!isInterviewStarted) {
-    return (
-      <Container maxWidth="md">
-        <Box sx={{ mt: 4 }}>
-          <InterviewSetup onStart={handleStartInterview} />
-        </Box>
-      </Container>
-    );
+    return <InterviewSetup onStart={() => dispatch(resetInterview())} />;
   }
-
-  if (questions.length === 0) {
-    return (
-      <Container maxWidth="md">
-        <Box sx={{ py: 4 }}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h5" gutterBottom>
-              Loading Questions...
-            </Typography>
-            <CircularProgress />
-            <Button
-              variant="outlined"
-              onClick={handleBack}
-              sx={{ mt: 2, display: 'block' }}
-            >
-              Back to Dashboard
-            </Button>
-          </Paper>
-        </Box>
-      </Container>
-    );
-  }
-
-  const handleMediaRecordingComplete = (mediaBlob: Blob | null, type: 'audio' | 'video' | null) => {
-    if (!mediaBlob || !type) {
-      // If mediaBlob is null, it means the recording was deleted
-      setCurrentAnswer(prev => ({
-        ...prev,
-        mediaUrl: undefined,
-        mediaType: undefined
-      }));
-      return;
-    }
-
-    // In production, you would upload this to a server and get a URL back
-    const mediaUrl = URL.createObjectURL(mediaBlob);
-    setCurrentAnswer(prev => ({
-      ...prev,
-      mediaUrl,
-      mediaType: type
-    }));
-  };
-
-  if (isInterviewComplete) {
-    console.log('Showing completion screen');
-    return (
-      <Container maxWidth="md">
-        <Box sx={{ py: 4 }}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h5" gutterBottom align="center">
-              {selectedLanguage === 'fr' ? 'Entretien terminé !' : 
-               selectedLanguage === 'ar' ? '!تم الانتهاء من المقابلة' : 
-               'Interview Complete!'}
-            </Typography>
-            <Typography paragraph align="center">
-              {selectedLanguage === 'fr' ? 
-                'Merci d\'avoir terminé l\'entretien. Vos réponses ont été enregistrées et analysées.' :
-               selectedLanguage === 'ar' ?
-                '.شكراً لإكمال المقابلة. تم تسجيل إجاباتك وتحليلها' :
-                'Thank you for completing the interview. Your responses have been recorded and analyzed.'}
-            </Typography>
-            <Typography paragraph align="center" color="text.secondary">
-              {selectedLanguage === 'fr' ? 
-                'Redirection vers le tableau de bord...' :
-               selectedLanguage === 'ar' ?
-                '...جارٍ إعادة التوجيه إلى لوحة التحكم' :
-                'Redirecting to dashboard...'}
-            </Typography>
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
-              <CircularProgress />
-            </Box>
-          </Paper>
-        </Box>
-      </Container>
-    );
-  }
-
-  const currentQuestion = questions[currentQuestionIndex];
-  const feedback = currentAnswer.feedback;
 
   return (
-    <Container maxWidth="lg">
-      <Box sx={{ py: 4 }}>
-        <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          {selectedLanguage === 'fr' ? 'Questions d\'entretien' :
-           selectedLanguage === 'ar' ? 'أسئلة المقابلة' :
-           'Interview Questions'}
-          <Box sx={{ minWidth: 200 }}>
-            <LanguageSelector value={selectedLanguage} onChange={handleLanguageChange} />
-          </Box>
-        </Typography>
-
-        <Stepper activeStep={currentQuestionIndex} sx={{ mb: 4 }}>
-          {questions.map((_, index) => (
-            <Step key={index}>
-              <StepLabel>
-                {selectedLanguage === 'fr' ? `Question ${index + 1}` :
-                 selectedLanguage === 'ar' ? `${index + 1} السؤال` :
-                 `Question ${index + 1}`}
-              </StepLabel>
-            </Step>
-          ))}
-        </Stepper>
-
-        <Paper sx={{ p: 3, direction: selectedLanguage === 'ar' ? 'rtl' : 'ltr' }}>
-          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
-          <Typography variant="h6" gutterBottom>
-            {currentQuestion?.text[selectedLanguage]}
-          </Typography>
-
-          {currentQuestion?.context && (
-            <Typography
-              variant="body2"
-              color="text.secondary"
-              sx={{ mb: 2, fontStyle: 'italic' }}
-            >
-              {selectedLanguage === 'fr' ? 'Contexte: ' :
-               selectedLanguage === 'ar' ? 'السياق: ' :
-               'Context: '}
-              {currentQuestion.context[selectedLanguage]}
-            </Typography>
-          )}
-
-          <Box sx={{ mt: 3 }}>
-            <Typography variant="subtitle1" gutterBottom>
-              {selectedLanguage === 'fr' ? 'Répondez avec du texte, de l\'audio ou de la vidéo:' :
-               selectedLanguage === 'ar' ? ':أجب بالنص أو الصوت أو الفيديو' :
-               'Answer with text, audio, or video:'}
-            </Typography>
-            
-            <TextField
-              fullWidth
-              multiline
-              rows={6}
-              value={currentAnswer.text}
-              onChange={(e) => setCurrentAnswer(prev => ({ ...prev, text: e.target.value }))}
-              placeholder={
-                selectedLanguage === 'fr' ? 'Tapez votre réponse ici...' :
-                selectedLanguage === 'ar' ? '...اكتب إجابتك هنا' :
-                'Type your answer here...'
-              }
-              sx={{ mb: 2 }}
-              InputProps={{
-                style: { textAlign: selectedLanguage === 'ar' ? 'right' : 'left' }
-              }}
-            />
-
-            <MediaRecorder 
-              onRecordingComplete={handleMediaRecordingComplete}
-              questionId={currentQuestion.id}
-              existingRecording={
-                currentAnswer.mediaUrl ? {
-                  url: currentAnswer.mediaUrl,
-                  type: currentAnswer.mediaType!
-                } : undefined
-              }
-            />
-
-            {feedback && (
-              <Card sx={{ mt: 3, bgcolor: 'grey.50' }}>
-                <CardContent>
-                  <Typography variant="h6" gutterBottom>
-                    {selectedLanguage === 'fr' ? 'Analyse de la réponse' :
-                     selectedLanguage === 'ar' ? 'تحليل الإجابة' :
-                     'Answer Analysis'}
+    <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Fade in timeout={800}>
+        <Box sx={{ mb: 4 }}>
+          <Grid container spacing={3}>
+            <Grid item xs={12}>
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 3,
+                  borderRadius: 2,
+                  border: `1px solid ${theme.palette.grey[200]}`,
+                  background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.05)}, ${alpha(theme.palette.primary.light, 0.05)})`,
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                  <Typography variant="h4" component="h1" sx={{ fontWeight: 700, color: theme.palette.grey[900] }}>
+                    {t('interview.title')}
                   </Typography>
-                  <Typography variant="body1" gutterBottom>
-                    {selectedLanguage === 'fr' ? 'Score: ' :
-                     selectedLanguage === 'ar' ? 'النتيجة: ' :
-                     'Score: '}
-                    {feedback.score.toFixed(1)} / 5
-                  </Typography>
-                  
-                  <Typography variant="subtitle1" sx={{ mt: 2 }}>
-                    {selectedLanguage === 'fr' ? 'Points positifs:' :
-                     selectedLanguage === 'ar' ? ':النقاط الإيجابية' :
-                     'Positive Points:'}
-                  </Typography>
-                  <ul>
-                    {feedback.comments.map((comment, index) => (
-                      <li key={index}>{comment}</li>
-                    ))}
-                  </ul>
+                  <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                    <LanguageSelector
+                      value={language}
+                      onChange={handleLanguageChange}
+                    />
+                    <Chip
+                      icon={<Timer />}
+                      label={formatTime(elapsedTime)}
+                      color="primary"
+                      variant="outlined"
+                      sx={{ borderWidth: 2 }}
+                    />
+                  </Box>
+                </Box>
 
-                  <Typography variant="subtitle1" sx={{ mt: 2 }}>
-                    {selectedLanguage === 'fr' ? 'Suggestions d\'amélioration:' :
-                     selectedLanguage === 'ar' ? ':اقتراحات للتحسين' :
-                     'Suggestions for Improvement:'}
-                  </Typography>
-                  <ul>
-                    {feedback.suggestions.map((suggestion, index) => (
-                      <li key={index}>{suggestion}</li>
-                    ))}
-                  </ul>
+                <Stepper
+                  activeStep={currentQuestionIndex}
+                  sx={{
+                    '& .MuiStepLabel-root .Mui-completed': {
+                      color: theme.palette.success.main,
+                    },
+                    '& .MuiStepLabel-label.Mui-completed.MuiStepLabel-alternativeLabel': {
+                      color: theme.palette.success.main,
+                    },
+                    '& .MuiStepLabel-root .Mui-active': {
+                      color: theme.palette.primary.main,
+                    },
+                  }}
+                >
+                  {questions.map((_, index) => (
+                    <Step key={index}>
+                      <StepLabel>{t('interview.question', { number: index + 1 })}</StepLabel>
+                    </Step>
+                  ))}
+                </Stepper>
+              </Paper>
+            </Grid>
+
+            <Grid item xs={12}>
+              <Card
+                elevation={0}
+                sx={{
+                  borderRadius: 2,
+                  border: `1px solid ${theme.palette.grey[200]}`,
+                  overflow: 'visible',
+                }}
+              >
+                <CardContent sx={{ p: 4 }}>
+                  <Box sx={{ mb: 4 }}>
+                    <Typography
+                      variant="h5"
+                      gutterBottom
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                        color: theme.palette.grey[900],
+                        fontWeight: 600,
+                      }}
+                    >
+                      <QuestionAnswer color="primary" />
+                      {t('interview.currentQuestion')}
+                    </Typography>
+                    <Typography variant="body1" sx={{ color: theme.palette.text.primary, fontSize: '1.1rem' }}>
+                      {currentQuestion?.text || ''}
+                    </Typography>
+                  </Box>
+
+                  <Box sx={{ mb: 4 }}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={6}
+                      variant="outlined"
+                      placeholder={t('interview.answerPlaceholder') || ''}
+                      value={currentAnswer?.text || ''}
+                      onChange={(e) => handleAnswerChange(e.target.value)}
+                      sx={{
+                        '& .MuiOutlinedInput-root': {
+                          backgroundColor: theme.palette.background.paper,
+                          '&:hover fieldset': {
+                            borderColor: theme.palette.primary.main,
+                          },
+                          '&.Mui-focused fieldset': {
+                            borderColor: theme.palette.primary.main,
+                          },
+                        },
+                      }}
+                    />
+                  </Box>
+
+                  <Box sx={{ mb: 4 }}>
+                    <MediaRecorder
+                      onRecordingComplete={handleMediaRecordingComplete}
+                      questionId={currentQuestion?.id}
+                      existingRecording={
+                        currentAnswer?.mediaUrl
+                          ? {
+                              url: currentAnswer.mediaUrl,
+                              type: currentAnswer.mediaType!,
+                            }
+                          : undefined
+                      }
+                    />
+                  </Box>
+
+                  {currentAnswer?.analysis && (
+                    <Box sx={{ mb: 4 }}>
+                      <DetailedAnalysis
+                        open={true}
+                        onClose={() => {}}
+                        analysis={currentAnswer.analysis}
+                        question={currentQuestion?.text || ''}
+                      />
+                    </Box>
+                  )}
+
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 2,
+                      mt: 4,
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', gap: 2 }}>
+                      <Tooltip title={t('interview.previous')}>
+                        <Button
+                          variant="outlined"
+                          onClick={handlePrevious}
+                          disabled={currentQuestionIndex === 0}
+                          startIcon={<ArrowBack />}
+                        >
+                          {t('interview.previous')}
+                        </Button>
+                      </Tooltip>
+                      <Tooltip title={t('interview.retry')}>
+                        <Button
+                          variant="outlined"
+                          onClick={handleRetryQuestion}
+                          startIcon={<Refresh />}
+                        >
+                          {t('interview.retry')}
+                        </Button>
+                      </Tooltip>
+                    </Box>
+
+                    <Box sx={{ display: 'flex', gap: 2 }}>
+                      {currentQuestionIndex === questions.length - 1 ? (
+                        <Tooltip title={t('interview.complete')}>
+                          <Button
+                            variant="contained"
+                            color="success"
+                            onClick={handleCompleteInterview}
+                            disabled={!currentAnswer?.text && !currentAnswer?.mediaUrl}
+                            startIcon={<Check />}
+                          >
+                            {t('interview.complete')}
+                          </Button>
+                        </Tooltip>
+                      ) : (
+                        <Tooltip title={t('interview.next')}>
+                          <Button
+                            variant="contained"
+                            onClick={handleNext}
+                            disabled={!currentAnswer?.text && !currentAnswer?.mediaUrl}
+                            endIcon={<ArrowForward />}
+                          >
+                            {t('interview.next')}
+                          </Button>
+                        </Tooltip>
+                      )}
+                    </Box>
+                  </Box>
                 </CardContent>
               </Card>
-            )}
-          </Box>
+            </Grid>
+          </Grid>
+        </Box>
+      </Fade>
 
-          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between' }}>
-            <Button
-              variant="outlined"
-              onClick={handlePrevious}
-              disabled={currentQuestionIndex === 0 || loading}
-            >
-              {selectedLanguage === 'fr' ? 'Question précédente' :
-               selectedLanguage === 'ar' ? 'السؤال السابق' :
-               'Previous Question'}
-            </Button>
-            <Button
-              variant="contained"
-              onClick={handleNext}
-              disabled={!currentAnswer.text.trim() && !currentAnswer.mediaUrl || loading}
-              endIcon={loading && <CircularProgress size={20} />}
-            >
-              {currentQuestionIndex === questions.length - 1 ?
-                (selectedLanguage === 'fr' ? 'Terminer l\'entretien' :
-                 selectedLanguage === 'ar' ? 'إنهاء المقابلة' :
-                 'Complete Interview') :
-                (selectedLanguage === 'fr' ? 'Question suivante' :
-                 selectedLanguage === 'ar' ? 'السؤال التالي' :
-                 'Next Question')}
-            </Button>
-          </Box>
-
-          {/* Add Analysis Button */}
-          {answers[currentQuestionIndex]?.text && (
-            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
-              <Button
-                variant="outlined"
-                color="primary"
-                onClick={handleAnalyzeClick}
-                startIcon={<AnalyticsIcon />}
-                disabled={loading}
-              >
-                {loading ? 'Analyzing...' : 'View Detailed Analysis'}
-              </Button>
-            </Box>
-          )}
-        </Paper>
-      </Box>
-
-      {/* Detailed Analysis Dialog */}
-      {currentAnalysis && (
-        <DetailedAnalysis
-          open={showDetailedAnalysis}
-          onClose={() => setShowDetailedAnalysis(false)}
-          analysis={currentAnalysis}
-          question={questions[currentQuestionIndex].text[selectedLanguage]}
-        />
+      {isLoading && (
+        <Box
+          sx={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: alpha(theme.palette.background.paper, 0.7),
+            zIndex: 1000,
+          }}
+        >
+          <Paper
+            elevation={0}
+            sx={{
+              p: 4,
+              borderRadius: 2,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 2,
+              backgroundColor: theme.palette.background.paper,
+              border: `1px solid ${theme.palette.grey[200]}`,
+            }}
+          >
+            <CircularProgress size={48} />
+            <Typography variant="h6" sx={{ color: theme.palette.text.primary }}>
+              {t('interview.analyzing')}
+            </Typography>
+          </Paper>
+        </Box>
       )}
     </Container>
   );

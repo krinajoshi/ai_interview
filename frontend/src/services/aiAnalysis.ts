@@ -225,108 +225,73 @@ async function transcribeMedia(mediaUrl: string, mediaType: 'audio' | 'video'): 
 
 export const analyzeAnswer = async (
   text: string,
-  mediaUrl?: string,
-  mediaType?: 'audio' | 'video',
-  question?: string
+  mediaUrl: string,
+  mediaType: 'audio' | 'video' | 'text',
+  question: string
 ): Promise<AIAnalysisResult> => {
   try {
-    let transcription: string | undefined;
-    
-    console.log('analyzeAnswer called with:', {
-      text: text.substring(0, 100),
-      mediaUrl: mediaUrl ? 'present' : 'absent',
-      mediaType,
-      question
+    const response = await axios.post('/api/v1/sentiment/analyze', {
+      text,
+      media_url: mediaUrl,
+      media_type: mediaType,
+      question,
     });
+
+    const { data } = response;
     
-    // If media URL is provided, transcribe it first
-    if (mediaUrl && mediaType) {
-      try {
-        console.log('Starting media transcription...');
-        transcription = await transcribeMedia(mediaUrl, mediaType);
-        console.log('Transcription completed:', transcription?.substring(0, 100));
-      } catch (error) {
-        console.error('Transcription failed:', error);
-        // Continue with analysis even if transcription fails
+    // Transform the backend response to match our frontend type
+    const result: AIAnalysisResult = {
+      relevanceScore: data.content_analysis?.relevance_score || 0,
+      sentimentScore: data.sentiment?.score || 0,
+      qualityScore: data.score || 0,
+      feedback: [],
+      suggestions: [],
+    };
+
+    // Collect feedback points
+    if (data.content_analysis?.feedback) {
+      const { relevant_points = [], missing_points = [], off_topic_content = [] } = data.content_analysis.feedback;
+      
+      // Add relevant points as positive feedback
+      result.feedback.push(...relevant_points.map((point: string) => `✓ ${point}`));
+      
+      // Add missing points and off-topic content as suggestions
+      result.suggestions.push(
+        ...missing_points.map((point: string) => `Consider addressing: ${point}`),
+        ...off_topic_content.map((point: string) => `Remove off-topic content: ${point}`)
+      );
+    }
+
+    // Add quality-based feedback
+    if (data.quality_metrics) {
+      if (!data.quality_metrics.has_meaningful_structure) {
+        result.suggestions.push('Improve the structure of your response');
+      }
+      if (data.quality_metrics.has_gibberish) {
+        result.suggestions.push('Make your response clearer and more coherent');
+      }
+      if (data.quality_metrics.excessive_repetition) {
+        result.suggestions.push('Reduce repetitive content in your response');
+      }
+      if (data.quality_metrics.word_count < 50) {
+        result.suggestions.push('Consider providing a more detailed response');
       }
     }
 
-    // Send both text and transcription for analysis
-    const response = await retry(async () => {
-      console.log('Sending analysis request with:', {
-        text: text.substring(0, 100),
-        transcription: transcription?.substring(0, 100),
-        question,
-        mediaUrl: mediaUrl ? 'present' : 'absent',
-        mediaType
-      });
+    // Add improvement points
+    if (data.improvement_points) {
+      result.suggestions.push(...data.improvement_points);
+    }
 
-      const result = await axios.post(SENTIMENT_API_URL, {
-        text,
-        question,
-        transcription
-      }, {
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000 // 30 second timeout
-      });
-
-      console.log('Raw API response:', result.data);
-      return result;
-    });
-
-    // Log the response data before transformation
-    console.log('API response data:', {
-      sentiment: response.data.sentiment,
-      hasTranscription: !!response.data.transcription,
-      hasContentAnalysis: !!response.data.content_analysis,
-      hasQualityMetrics: !!response.data.quality_metrics,
-      feedback: response.data.feedback?.length,
-      improvementPoints: response.data.improvement_points?.length
-    });
-
-    // Validate and transform the response
-    const analysisResult: AIAnalysisResult = {
-      sentiment: {
-        label: response.data.sentiment.label || 'NEUTRAL',
-        score: response.data.sentiment.score || 0.5
-      },
-      transcription: transcription || response.data.transcription,
-      content_analysis: response.data.content_analysis ? {
-        relevance_score: response.data.content_analysis.relevance_score || 0,
-        similarity_score: response.data.content_analysis.similarity_score || 0,
-        rerank_score: response.data.content_analysis.rerank_score || 0,
-        feedback: {
-          relevant_points: response.data.content_analysis.feedback?.relevant_points || [],
-          missing_points: response.data.content_analysis.feedback?.missing_points || [],
-          off_topic_content: response.data.content_analysis.feedback?.off_topic_content || []
-        }
-      } : undefined,
-      quality_metrics: response.data.quality_metrics ? {
-        has_gibberish: response.data.quality_metrics.has_gibberish || false,
-        has_meaningful_structure: response.data.quality_metrics.has_meaningful_structure || false,
-        avg_sentence_length: response.data.quality_metrics.avg_sentence_length || 0,
-        sentence_count: response.data.quality_metrics.sentence_count || 0,
-        excessive_repetition: response.data.quality_metrics.excessive_repetition || false,
-        word_count: response.data.quality_metrics.word_count || 0
-      } : undefined,
-      score: response.data.score || 0,
-      feedback: response.data.feedback || [],
-      improvement_points: response.data.improvement_points || []
-    };
-
-    console.log('Transformed analysis result:', {
-      hasTranscription: !!analysisResult.transcription,
-      hasContentAnalysis: !!analysisResult.content_analysis,
-      hasQualityMetrics: !!analysisResult.quality_metrics,
-      feedback: analysisResult.feedback.length,
-      improvementPoints: analysisResult.improvement_points.length
-    });
-
-    return analysisResult;
+    return result;
   } catch (error) {
     console.error('Error analyzing answer:', error);
-    throw new Error('Failed to analyze answer');
+    return {
+      relevanceScore: 0,
+      sentimentScore: 0,
+      qualityScore: 0,
+      feedback: ['Unable to analyze the response'],
+      suggestions: ['Please try again or contact support if the issue persists'],
+    };
   }
 }; 

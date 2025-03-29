@@ -1,9 +1,8 @@
-import { Language } from '../components/LanguageSelector';
-
 export interface Answer {
-  text: string;
-  mediaUrl?: string;
-  mediaType?: 'audio' | 'video';
+  text?: string;
+  mediaUrl?: string | null;
+  mediaType?: 'audio' | 'video' | null;
+  analysis?: AIAnalysisResult;
   feedback?: {
     score: number;
     comments: string[];
@@ -13,12 +12,9 @@ export interface Answer {
 
 export interface Question {
   id: string;
-  text: {
-    en: string;
-    fr: string;
-    ar: string;
-  };
-  type: string;
+  text: string;
+  type: 'text' | 'audio' | 'video';
+  timeLimit?: number;
   context?: {
     en: string;
     fr: string;
@@ -27,8 +23,8 @@ export interface Question {
 }
 
 export interface SetAnswerPayload {
-  answer: Answer;
   questionIndex: number;
+  answer: Answer;
 }
 
 export interface InterviewState {
@@ -43,34 +39,24 @@ export interface InterviewState {
   isInterviewStarted: boolean;
   isInterviewComplete: boolean;
   selectedLanguage: Language;
-  language: 'en' | 'fr' | 'ar';
+  language: Language;
 }
 
 export interface AIAnalysisResult {
-  sentiment: {
-    label: string;
-    score: number;
-  };
-  transcription?: string;
-  content_analysis?: {
-    relevance_score: number;
-    similarity_score: number;
-    rerank_score: number;
-    feedback: {
-      relevant_points: string[];
-      missing_points: string[];
-      off_topic_content: string[];
-    };
-  };
-  quality_metrics?: {
-    has_gibberish: boolean;
-    has_meaningful_structure: boolean;
-    avg_sentence_length: number;
-    sentence_count: number;
-    excessive_repetition: boolean;
-    word_count: number;
-  };
-  score: number;
+  relevanceScore: number;
+  sentimentScore: number;
   feedback: string[];
-  improvement_points: string[];
-} 
+  qualityScore: number;
+  suggestions: string[];
+  transcription?: string;
+  sentiment?: {
+    score: number;
+    label: string;
+  };
+}
+
+export interface InterviewSetupProps {
+  onStart: () => void;
+}
+
+export type Language = 'en' | 'fr' | 'ar'; 

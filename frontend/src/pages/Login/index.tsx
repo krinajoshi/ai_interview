@@ -74,7 +74,10 @@ const Login: React.FC = () => {
       }
 
       if (data.user && data.token) {
-        dispatch(loginSuccess({ ...data.user, token: data.token }));
+        dispatch(loginSuccess({
+          user: data.user,
+          token: data.token
+        }));
         navigate('/dashboard');
       } else {
         throw new Error('Invalid response format from server');
