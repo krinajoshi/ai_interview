@@ -1,44 +1,108 @@
 # AI Interview Platform
 
-A modern web application for conducting AI-powered technical interviews. The platform features real-time interview sessions, automated feedback, and comprehensive analytics.
+An intelligent interview platform that provides real-time feedback and analysis during technical interviews.
 
 ## Features
 
-- User authentication and profile management
-- AI-powered technical interviews
-- Real-time video and audio recording
-- Automated feedback and scoring
-- Interview analytics and progress tracking
-- Multi-language support
-- Responsive modern UI
-- Advanced content relevance analysis
-- Semantic answer evaluation
+### 1. Multi-Modal Interview Responses
+- Text-based answers
+- Audio recording support
+- Video recording support
+- Real-time transcription of audio/video responses
+- Multi-language support (English, French, Arabic)
+
+### 2. AI-Powered Analysis
+- Sentiment analysis of responses
+- Content relevance scoring
+- Quality metrics analysis
+- Detailed feedback generation
+- Improvement suggestions
+
+### 3. Interview Dashboard
+- View past interviews
+- Access detailed analysis of each response
+- Track performance over time
+- Review transcriptions alongside recordings
+- Score tracking and feedback history
+
+### 4. Technical Features
+- AssemblyAI integration for accurate transcription
+- Real-time audio/video processing
+- Secure file handling
+- Responsive design
+- Cross-browser compatibility
+
+## Getting Started
+
+### Prerequisites
+- Node.js (v14 or higher)
+- Python 3.8+
+- FFmpeg (for audio processing)
+- AssemblyAI API key
+
+### Environment Setup
+1. Clone the repository
+2. Install frontend dependencies:
+   ```bash
+   cd frontend
+   npm install
+   ```
+3. Install backend dependencies:
+   ```bash
+   cd backend
+   pip install -r requirements.txt
+   ```
+4. Set up environment variables:
+   - Frontend (.env):
+     ```
+     REACT_APP_API_URL=http://localhost:8000
+     ```
+   - Backend (.env):
+     ```
+     ASSEMBLY_AI_TOKEN=your_assembly_ai_token
+     ```
+
+### Running the Application
+1. Start the backend server:
+   ```bash
+   cd backend
+   uvicorn app.main:app --reload
+   ```
+2. Start the frontend development server:
+   ```bash
+   cd frontend
+   npm start
+   ```
 
 ## Recent Updates
 
-### Answer Analysis Enhancements
+### Transcription Improvements
+- Switched to AssemblyAI for more reliable transcription
+- Added support for multiple audio formats (WAV, WebM, MP3, OGG)
+- Improved error handling and retry logic
+- Added transcription display in the dashboard
 
-- **Cohere Integration**: Added semantic content relevance checking using Cohere's AI models
-- **Improved Feedback System**: Enhanced feedback accuracy with specific points addressed and missed
-- **Semantic Analysis**: Implemented dual-model approach using embeddings and reranking
-- **Gibberish Detection**: Added robust detection of unclear or nonsensical responses
-- **Detailed Content Analysis**: Now provides point-by-point feedback on relevant and missing content
-- **Honest Feedback**: Improved accuracy of feedback with direct, specific suggestions
+### Dashboard Enhancements
+- Added transcription view alongside media recordings
+- Improved answer sequence display
+- Enhanced feedback visualization
+- Better error handling and user feedback
 
-### Backend Enhancements
+### Technical Improvements
+- Optimized audio file handling
+- Added file size validation
+- Improved error messages
+- Enhanced logging for debugging
 
-- **Improved Authentication**: Enhanced error handling in the authentication process with built-in fallback mechanism
-- **Legacy API Support**: Added backwards-compatible endpoints for the frontend
-- **Temporary Role Creation**: System now dynamically creates temporary roles when needed for interviews
-- **Robust Question Generation**: Implemented fallback question generation when AI services are unavailable
-- **CORS Configuration**: Fixed Cross-Origin Resource Sharing to allow frontend-backend communication
+## Contributing
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a new Pull Request
 
-### Troubleshooting Notes
-
-- **MongoDB Connection**: If MongoDB connection fails, the system will create a dummy user for testing purposes
-- **Object ID Handling**: Fixed handling of MongoDB ObjectIDs for temporary roles
-- **Question Format**: Standardized question format with multi-language support (en, fr, ar)
-- **Debugging Logs**: Added extensive logging throughout the application for easier troubleshooting
+## License
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Tech Stack
 
