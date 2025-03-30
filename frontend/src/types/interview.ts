@@ -4,6 +4,7 @@ export interface Answer {
   text: string;
   mediaUrl?: string;
   mediaType?: 'audio' | 'video';
+  transcription?: string;
   feedback?: {
     score: number;
     comments: string[];

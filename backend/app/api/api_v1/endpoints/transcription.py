@@ -7,7 +7,8 @@ import logging
 import json
 from typing import Optional
 import requests
-from huggingface_hub import HfApi
+import time
+import tempfile
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -17,14 +18,13 @@ load_dotenv()
 
 router = APIRouter()
 
-HUGGING_FACE_API_URL = "https://api-inference.huggingface.co/models/openai/whisper-large-v3"
-HUGGING_FACE_TOKEN = os.getenv("HUGGING_FACE_TOKEN")
+ASSEMBLY_AI_TOKEN = os.getenv("ASSEMBLY_AI_TOKEN")
 
 @router.post("/transcribe")
 async def transcribe_media(file: UploadFile = File(...)):
     try:
-        if not os.getenv("HUGGING_FACE_TOKEN"):
-            raise HTTPException(status_code=500, detail="Hugging Face token not configured")
+        if not os.getenv("ASSEMBLY_AI_TOKEN"):
+            raise HTTPException(status_code=500, detail="AssemblyAI token not configured")
 
         # Read file content
         file_content = await file.read()
@@ -37,75 +37,74 @@ async def transcribe_media(file: UploadFile = File(...)):
             logger.error("File too large")
             raise HTTPException(status_code=400, detail="File too large (max 10MB)")
 
-        # Get file extension and validate content type
-        file_ext = os.path.splitext(file.filename)[1].lower()
-        content_type = file.content_type or ""
-        
-        valid_audio_types = {
-            ".mp3": ["audio/mpeg", "audio/mp3"],
-            ".wav": ["audio/wav", "audio/x-wav", "audio/wave"],
-            ".m4a": ["audio/mp4", "audio/x-m4a"],
-            ".ogg": ["audio/ogg", "application/ogg"],
-            ".webm": ["audio/webm", "video/webm"]
+        # Log file details
+        logger.info(f"Received file: {file.filename}, type: {file.content_type}, size: {len(file_content)} bytes")
+
+        # Step 1: Upload the audio file to AssemblyAI
+        headers = {
+            "authorization": os.getenv("ASSEMBLY_AI_TOKEN"),
+            "content-type": "application/json"
         }
-
-        is_valid = False
-        for ext, types in valid_audio_types.items():
-            if file_ext == ext or any(t in content_type.lower() for t in types):
-                is_valid = True
-                break
-
-        if not is_valid:
-            logger.error(f"Invalid file type: {content_type} with extension {file_ext}")
-            raise HTTPException(status_code=400, detail="Invalid audio file format")
-
-        # Save file temporarily
-        temp_file = f"temp_audio{file_ext}"
-        with open(temp_file, "wb") as f:
-            f.write(file_content)
-
-        try:
-            # Initialize Hugging Face client
-            hf = HfApi()
+        
+        # Upload the file
+        upload_response = requests.post(
+            "https://api.assemblyai.com/v2/upload",
+            headers=headers,
+            data=file_content
+        )
+        
+        if upload_response.status_code != 200:
+            logger.error(f"Upload failed: {upload_response.text}")
+            raise HTTPException(status_code=500, detail="Failed to upload audio file")
             
-            # Upload file for transcription
-            logger.info(f"Uploading file for transcription: {temp_file}")
-            files = {
-                "file": (temp_file, open(temp_file, "rb"), f"audio/{file_ext[1:]}")
-            }
-            headers = {
-                "Authorization": f"Bearer {os.getenv('HUGGING_FACE_TOKEN')}"
-            }
+        upload_url = upload_response.json()["upload_url"]
+        logger.info(f"File uploaded successfully: {upload_url}")
+
+        # Step 2: Submit for transcription
+        transcript_request = {
+            "audio_url": upload_url,
+            "language_code": "en",
+            "punctuate": True
+        }
+        
+        transcript_response = requests.post(
+            "https://api.assemblyai.com/v2/transcript",
+            json=transcript_request,
+            headers=headers
+        )
+        
+        if transcript_response.status_code != 200:
+            logger.error(f"Transcription request failed: {transcript_response.text}")
+            raise HTTPException(status_code=500, detail="Failed to submit transcription request")
             
-            response = requests.post(
-                "https://api-inference.huggingface.co/models/openai/whisper-large-v3",
-                headers=headers,
-                files=files,
-                timeout=30
+        transcript_id = transcript_response.json()["id"]
+        logger.info(f"Transcription submitted: {transcript_id}")
+
+        # Step 3: Poll for results
+        while True:
+            polling_response = requests.get(
+                f"https://api.assemblyai.com/v2/transcript/{transcript_id}",
+                headers=headers
             )
             
-            if response.status_code != 200:
-                logger.error(f"Transcription failed with status {response.status_code}: {response.text}")
-                raise HTTPException(status_code=response.status_code, detail="Transcription failed")
-
-            result = response.json()
+            if polling_response.status_code != 200:
+                logger.error(f"Polling failed: {polling_response.text}")
+                raise HTTPException(status_code=500, detail="Failed to get transcription status")
+                
+            transcript_result = polling_response.json()
             
-            if not result or "text" not in result:
-                logger.error("Invalid response format from Hugging Face API")
-                raise HTTPException(status_code=500, detail="Invalid transcription response")
-
-            transcription = result["text"].strip()
-            if not transcription:
-                logger.warning("Empty transcription received")
-                return {"transcription": "", "message": "No speech detected"}
-
-            logger.info(f"Transcription successful: {transcription[:100]}...")
-            return {"transcription": transcription}
-
-        finally:
-            # Clean up temporary file
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
+            if transcript_result["status"] == "completed":
+                transcription = transcript_result["text"].strip()
+                if not transcription:
+                    return {"transcription": "", "message": "No speech detected"}
+                return {"transcription": transcription}
+                
+            elif transcript_result["status"] == "error":
+                error_msg = transcript_result.get("error", "Unknown error")
+                logger.error(f"Transcription failed: {error_msg}")
+                raise HTTPException(status_code=500, detail=f"Transcription failed: {error_msg}")
+                
+            time.sleep(1)  # Wait 1 second before polling again
 
     except HTTPException as e:
         raise e
