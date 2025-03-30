@@ -20,6 +20,8 @@ import {
   Divider,
   Rating,
   Chip,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { useAppSelector } from '../../store';
@@ -54,9 +56,15 @@ interface Interview {
 const Dashboard: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const user = useAppSelector((state) => state.auth.user);
+  const { user, loading, error } = useAppSelector((state) => state.auth);
   const [pastInterviews, setPastInterviews] = useState<Interview[]>([]);
   const [selectedInterview, setSelectedInterview] = useState<Interview | null>(null);
+
+  useEffect(() => {
+    if (!user && !loading) {
+      navigate('/login');
+    }
+  }, [user, loading, navigate]);
 
   useEffect(() => {
     const stored = localStorage.getItem('pastInterviews');
@@ -78,6 +86,30 @@ const Dashboard: React.FC = () => {
     setSelectedInterview(null);
   };
 
+  if (loading) {
+    return (
+      <Container maxWidth="lg">
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+          <CircularProgress />
+        </Box>
+      </Container>
+    );
+  }
+
+  if (error) {
+    return (
+      <Container maxWidth="lg">
+        <Box sx={{ py: 4 }}>
+          <Alert severity="error">{error}</Alert>
+        </Box>
+      </Container>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
+
   return (
     <Container maxWidth="lg">
       <Box sx={{ py: 4 }}>
@@ -90,7 +122,7 @@ const Dashboard: React.FC = () => {
           <Grid item xs={12}>
             <Paper sx={{ p: 3, mb: 3 }}>
               <Typography variant="h5" gutterBottom>
-                Welcome back, {user?.name}!
+                {t('dashboard.welcomeBack', { name: user.name })}
               </Typography>
               <Button
                 variant="contained"
@@ -98,7 +130,7 @@ const Dashboard: React.FC = () => {
                 onClick={() => navigate('/interview')}
                 sx={{ mt: 2 }}
               >
-                {t('Start Interview')}
+                {t('interview.start')}
               </Button>
             </Paper>
           </Grid>

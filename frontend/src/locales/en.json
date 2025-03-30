@@ -32,6 +32,7 @@
     "feedback": "View Feedback"
   },
   "dashboard": {
+    "welcomeBack": "Welcome back, {{name}}!",
     "upcomingInterviews": "Upcoming Interviews",
     "pastInterviews": "Past Interviews",
     "performance": "Performance Overview",
