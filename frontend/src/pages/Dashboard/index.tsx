@@ -28,17 +28,6 @@ import VideocamIcon from '@mui/icons-material/Videocam';
 import MicIcon from '@mui/icons-material/Mic';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 
-interface Answer {
-  text: string;
-  mediaUrl?: string;
-  mediaType?: 'audio' | 'video';
-  feedback?: {
-    score: number;
-    comments: string[];
-    suggestions: string[];
-  };
-}
-
 interface Interview {
   jobTitle: string;
   questions: Array<{ 
@@ -46,7 +35,18 @@ interface Interview {
     text: string;
     type: string;
   }>;
-  answers: Record<string, Answer>;
+  answers: Array<{
+    questionIndex: number;
+    text: string;
+    mediaUrl?: string;
+    mediaType?: 'audio' | 'video';
+    transcription?: string;
+    feedback?: {
+      score: number;
+      comments: string[];
+      suggestions: string[];
+    };
+  }>;
   completedAt: string;
   language: string;
 }
@@ -66,8 +66,7 @@ const Dashboard: React.FC = () => {
   }, []);
 
   const calculateAverageScore = (interview: Interview) => {
-    const scores = Object.values(interview.answers)
-      .map(answer => answer.feedback?.score || 0);
+    const scores = interview.answers.map(answer => answer.feedback?.score || 0);
     return scores.reduce((a, b) => a + b, 0) / scores.length;
   };
 
@@ -174,9 +173,9 @@ const Dashboard: React.FC = () => {
                           <Typography variant="subtitle1">
                             Q{index + 1}: {question.text}
                           </Typography>
-                          {selectedInterview.answers[question.id]?.feedback && (
+                          {selectedInterview.answers[index]?.feedback && (
                             <Rating
-                              value={selectedInterview.answers[question.id].feedback!.score / 5}
+                              value={selectedInterview.answers[index].feedback!.score / 5}
                               readOnly
                               precision={0.1}
                               size="small"
@@ -193,39 +192,61 @@ const Dashboard: React.FC = () => {
                             color="text.primary"
                             sx={{ whiteSpace: 'pre-wrap', mb: 2 }}
                           >
-                            {selectedInterview.answers[question.id]?.text || 'No text answer provided'}
+                            {selectedInterview.answers[index]?.text || 'No text answer provided'}
                           </Typography>
                           
                           {/* Media Response */}
-                          {selectedInterview.answers[question.id]?.mediaUrl && (
+                          {selectedInterview.answers[index]?.mediaUrl && (
                             <Box sx={{ mt: 2, mb: 2 }}>
                               <Chip
-                                icon={selectedInterview.answers[question.id].mediaType === 'video' ? 
+                                icon={selectedInterview.answers[index].mediaType === 'video' ? 
                                   <VideocamIcon /> : <MicIcon />}
-                                label={`${selectedInterview.answers[question.id].mediaType === 'video' ? 
+                                label={`${selectedInterview.answers[index].mediaType === 'video' ? 
                                   'Video' : 'Audio'} Response`}
                                 color="primary"
                                 variant="outlined"
                                 sx={{ mb: 1 }}
                               />
-                              {selectedInterview.answers[question.id].mediaType === 'video' ? (
+                              {selectedInterview.answers[index].mediaType === 'video' ? (
                                 <video
                                   controls
-                                  src={selectedInterview.answers[question.id].mediaUrl}
+                                  src={selectedInterview.answers[index].mediaUrl}
                                   style={{ maxWidth: '100%' }}
                                 />
                               ) : (
                                 <audio
                                   controls
-                                  src={selectedInterview.answers[question.id].mediaUrl}
+                                  src={selectedInterview.answers[index].mediaUrl}
                                   style={{ width: '100%' }}
                                 />
+                              )}
+                              
+                              {/* Transcription */}
+                              {selectedInterview.answers[index]?.transcription && (
+                                <Box sx={{ mt: 2 }}>
+                                  <Typography variant="subtitle2" gutterBottom>
+                                    Transcription:
+                                  </Typography>
+                                  <Paper 
+                                    variant="outlined" 
+                                    sx={{ 
+                                      p: 2, 
+                                      bgcolor: 'grey.50',
+                                      maxHeight: '200px',
+                                      overflow: 'auto'
+                                    }}
+                                  >
+                                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                                      {selectedInterview.answers[index].transcription}
+                                    </Typography>
+                                  </Paper>
+                                </Box>
                               )}
                             </Box>
                           )}
 
                           {/* Feedback */}
-                          {selectedInterview.answers[question.id]?.feedback && (
+                          {selectedInterview.answers[index]?.feedback && (
                             <Card variant="outlined" sx={{ mt: 2, bgcolor: 'grey.50' }}>
                               <CardContent>
                                 <Typography variant="subtitle2" gutterBottom>
@@ -236,7 +257,7 @@ const Dashboard: React.FC = () => {
                                   Positive Points:
                                 </Typography>
                                 <ul style={{ margin: '0.5rem 0' }}>
-                                  {selectedInterview.answers[question.id].feedback!.comments.map((comment, i) => (
+                                  {selectedInterview.answers[index].feedback!.comments.map((comment, i) => (
                                     <li key={i}>
                                       <Typography variant="body2">{comment}</Typography>
                                     </li>
@@ -247,7 +268,7 @@ const Dashboard: React.FC = () => {
                                   Suggestions:
                                 </Typography>
                                 <ul style={{ margin: '0.5rem 0' }}>
-                                  {selectedInterview.answers[question.id].feedback!.suggestions.map((suggestion, i) => (
+                                  {selectedInterview.answers[index].feedback!.suggestions.map((suggestion, i) => (
                                     <li key={i}>
                                       <Typography variant="body2">{suggestion}</Typography>
                                     </li>

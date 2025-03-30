@@ -107,58 +107,72 @@ async function blobUrlToFile(blobUrl: string, mediaType: 'audio' | 'video'): Pro
       throw new Error('Received empty blob');
     }
 
-    // Get the correct file extension and MIME type based on media type and content type
-    let extension = '';
-    let mimeType = blob.type;
-
-    // If blob type is empty or generic, set it based on media type
-    if (!blob.type || blob.type === 'application/octet-stream') {
-      if (mediaType === 'audio') {
-        mimeType = 'audio/wav';
-        extension = '.wav';
-      } else {
-        mimeType = 'video/mp4';
-        extension = '.mp4';
-      }
-    } else {
-      // Set extension based on actual blob type
-      if (blob.type.includes('webm')) {
-        extension = '.webm';
-      } else if (blob.type.includes('mp4')) {
-        extension = '.mp4';
-      } else if (blob.type.includes('wav')) {
-        extension = '.wav';
-      } else if (blob.type.includes('mp3')) {
-        extension = '.mp3';
-      } else {
-        // Default to wav for audio and mp4 for video
-        extension = mediaType === 'audio' ? '.wav' : '.mp4';
-      }
-    }
-    
-    // Create a new filename with timestamp to avoid caching issues
+    // Create a new filename with timestamp
     const timestamp = new Date().getTime();
-    const filename = `recording_${timestamp}${extension}`;
     
-    // Create the file with the correct MIME type
-    const file = new File([blob], filename, { type: mimeType });
-    
-    console.log('Created file:', {
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      extension,
-      mimeType
-    });
+    // For audio files, use the original blob type
+    if (mediaType === 'audio') {
+      // Get the extension from the blob type or default to .wav
+      let extension = '.wav';
+      let mimeType = 'audio/wav';
+      
+      if (blob.type) {
+        if (blob.type.includes('webm')) {
+          extension = '.webm';
+          mimeType = 'audio/webm';
+        } else if (blob.type.includes('mp4')) {
+          extension = '.m4a';
+          mimeType = 'audio/mp4';
+        } else if (blob.type.includes('mp3')) {
+          extension = '.mp3';
+          mimeType = 'audio/mpeg';
+        } else if (blob.type.includes('ogg')) {
+          extension = '.ogg';
+          mimeType = 'audio/ogg';
+        }
+      }
+      
+      const filename = `recording_${timestamp}${extension}`;
+      const file = new File([blob], filename, { 
+        type: mimeType,
+        lastModified: timestamp
+      });
+      
+      console.log('Created audio file:', {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        lastModified: file.lastModified
+      });
 
-    return file;
+      return file;
+    } else {
+      // For video files, keep the original format
+      const extension = blob.type.includes('webm') ? '.webm' : '.mp4';
+      const mimeType = blob.type || 'video/mp4';
+      const filename = `recording_${timestamp}${extension}`;
+      
+      const file = new File([blob], filename, { 
+        type: mimeType,
+        lastModified: timestamp
+      });
+      
+      console.log('Created video file:', {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        lastModified: file.lastModified
+      });
+
+      return file;
+    }
   } catch (error: any) {
     console.error('Error in blobUrlToFile:', error);
     throw new Error(`Failed to convert blob URL to file: ${error.message}`);
   }
 }
 
-async function transcribeMedia(mediaUrl: string, mediaType: 'audio' | 'video'): Promise<string> {
+export async function transcribeMedia(mediaUrl: string, mediaType: 'audio' | 'video'): Promise<string> {
   try {
     console.log(`Starting ${mediaType} transcription...`);
     
@@ -182,43 +196,69 @@ async function transcribeMedia(mediaUrl: string, mediaType: 'audio' | 'video'): 
     // Create FormData and append the file
     const formData = new FormData();
     formData.append('file', mediaFile);
-    formData.append('media_type', mediaType);
     
-    const response = await retry(async () => {
-      console.log('Sending media file to backend...', {
-        fileName: mediaFile.name,
-        fileType: mediaFile.type,
-        fileSize: mediaFile.size,
-        mediaType
-      });
+    let lastError = null;
+    let attempts = 0;
+    const maxAttempts = 3;
+    
+    while (attempts < maxAttempts) {
+      try {
+        console.log(`Attempt ${attempts + 1} of ${maxAttempts}...`);
+        
+        const response = await axios.post(
+          TRANSCRIPTION_API_URL,
+          formData,
+          {
+            headers: {
+              'Content-Type': 'multipart/form-data'
+            },
+            timeout: 60000 // 60 seconds timeout for large files
+          }
+        );
 
-      const result = await axios.post(
-        TRANSCRIPTION_API_URL,
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          },
-          timeout: 60000 // 60 seconds timeout for large files
+        console.log('Transcription response:', response.data);
+
+        if (!response.data.transcription && response.data.message) {
+          console.warn('Transcription warning:', response.data.message);
+          throw new Error(response.data.message);
         }
-      );
-      console.log('Transcription response:', result.data);
-      return result;
-    });
 
-    if (!response.data.transcription && response.data.message) {
-      console.warn('Transcription warning:', response.data.message);
-      throw new Error(response.data.message);
+        return response.data.transcription || '';
+      } catch (error: any) {
+        lastError = error;
+        attempts++;
+        
+        // If it's a 503 error (service unavailable), wait before retrying
+        if (error.response?.status === 503) {
+          console.log(`Service unavailable (attempt ${attempts}/${maxAttempts}), waiting before retry...`);
+          await new Promise(resolve => setTimeout(resolve, 2000 * attempts)); // Exponential backoff
+          continue;
+        }
+        
+        // For other errors, throw immediately
+        throw error;
+      }
     }
-
-    return response.data.transcription || '';
+    
+    // If we get here, all attempts failed
+    throw new Error(`Transcription failed after ${maxAttempts} attempts: ${lastError?.message}`);
   } catch (error: any) {
     console.error('Transcription error:', {
       message: error.message,
       response: error.response?.data,
       status: error.response?.status
     });
-    const errorMessage = error.response?.data?.message || error.message || 'Error transcribing audio';
+    
+    // Provide a more user-friendly error message
+    let errorMessage = 'Error transcribing audio';
+    if (error.response?.status === 503) {
+      errorMessage = 'The transcription service is temporarily unavailable. Please try again in a few moments.';
+    } else if (error.response?.status === 400) {
+      errorMessage = 'Invalid audio format. Please try recording again.';
+    } else if (error.message.includes('timeout')) {
+      errorMessage = 'The transcription request timed out. Please try a shorter recording.';
+    }
+    
     throw new Error(errorMessage);
   }
 }

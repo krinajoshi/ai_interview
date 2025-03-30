@@ -32,7 +32,7 @@ import { Language } from '../../components/LanguageSelector';
 import InterviewSetup from './Setup';
 import MediaRecorder from '../../components/MediaRecorder';
 import LanguageSelector from '../../components/LanguageSelector';
-import { analyzeAnswer } from '../../services/aiAnalysis';
+import { analyzeAnswer, transcribeMedia } from '../../services/aiAnalysis';
 import DetailedAnalysis from '../../components/DetailedAnalysis';
 
 const getLanguageSpecificFeedback = async (answer: Answer, questionText: string, language: Language): Promise<Answer['feedback']> => {
@@ -310,7 +310,8 @@ const Interview: React.FC = () => {
           text: answer.text,
           mediaUrl: answer.mediaUrl,
           mediaType: answer.mediaType,
-          feedback: answer.feedback
+          feedback: answer.feedback,
+          transcription: answer.transcription || ''
         })),
         completedAt: new Date().toISOString(),
         language: selectedLanguage
@@ -339,9 +340,20 @@ const Interview: React.FC = () => {
       selectedLanguage
     );
     
+    // Get transcription if available
+    let transcription = '';
+    if (currentAnswer.mediaUrl && currentAnswer.mediaType) {
+      try {
+        transcription = await transcribeMedia(currentAnswer.mediaUrl, currentAnswer.mediaType);
+      } catch (error) {
+        console.error('Transcription failed:', error);
+      }
+    }
+    
     const answerWithFeedback = {
       ...currentAnswer,
-      feedback
+      feedback,
+      transcription
     };
 
     // Save the current answer
@@ -360,13 +372,21 @@ const Interview: React.FC = () => {
         type: q.type
       }));
 
+      // Get all answers including the last one
+      const allAnswers = [...answers];
+      allAnswers[currentQuestionIndex] = answerWithFeedback; // Ensure last answer is included
+
       // Save to localStorage before completing
       const interviewData = {
         jobTitle,
         questions: simplifiedQuestions,
-        answers: answers.map((answer, index) => ({
+        answers: allAnswers.map((answer, index) => ({
           questionIndex: index,
-          ...answer
+          text: answer.text,
+          mediaUrl: answer.mediaUrl,
+          mediaType: answer.mediaType,
+          transcription: answer.transcription || '',
+          feedback: answer.feedback
         })),
         completedAt: new Date().toISOString(),
         language: selectedLanguage
