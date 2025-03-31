@@ -50,12 +50,15 @@ export interface InterviewState {
 export interface AIAnalysisResult {
   score: number;
   feedback: string;
-  comments: string[];
-  suggestions: string[];
+  strong_points: string[];
+  improvement_points: string[];
+  structure_analysis: string;
+  technical_accuracy: string;
+  communication_style: string;
+  action_items: string[];
   sentiment: {
     score: number;
     label: string;
   };
-  improvement_points: string[];
-  transcription?: string;
+  transcription: string;
 } 

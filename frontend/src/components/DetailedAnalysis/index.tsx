@@ -1,174 +1,218 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions,
-  Button,
   Typography,
   Box,
-  Paper,
   List,
   ListItem,
   ListItemText,
+  CircularProgress,
+  ListItemIcon,
+  Alert,
   Divider,
-  LinearProgress,
 } from '@mui/material';
-import { AIAnalysisResult } from '../../types/interview';
+import { CheckCircle, Warning, Assignment, Star, Feedback, TrendingUp, Build, Chat, Task } from '@mui/icons-material';
+import { AIAnalysisResult, Answer } from '../../types/interview';
+import { analyzeAnswer } from '../../services/aiAnalysis';
 
 interface DetailedAnalysisProps {
   open: boolean;
   onClose: () => void;
-  analysis: AIAnalysisResult;
+  answer: Answer;
   question: string;
-  answer: {
-    text: string;
-    mediaUrl?: string;
-    mediaType?: 'audio' | 'video';
-  };
 }
 
-const DetailedAnalysis: React.FC<DetailedAnalysisProps> = ({
-  open,
-  onClose,
-  analysis,
-  question,
-  answer
-}) => {
-  const {
-    score,
-    feedback,
-    comments,
-    suggestions,
-    sentiment,
-    improvement_points,
-    transcription
-  } = analysis;
+const DetailedAnalysis: React.FC<DetailedAnalysisProps> = ({ open, onClose, answer, question }) => {
+  const [analysis, setAnalysis] = useState<AIAnalysisResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const performAnalysis = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Get the answer text (either from text or transcription)
+        const answerText = answer.transcription || answer.text;
+        
+        if (!answerText) {
+          setError('No answer text available for analysis');
+          return;
+        }
+
+        console.log('Starting analysis for:', { answerText, question });
+        
+        // Perform analysis
+        const analysisResult = await analyzeAnswer(
+          answerText,
+          answer.mediaUrl,
+          answer.mediaType,
+          question
+        );
+        
+        console.log('Analysis completed:', analysisResult);
+        setAnalysis(analysisResult);
+      } catch (err) {
+        console.error('Error performing analysis:', err);
+        setError('Failed to analyze the answer. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (open) {
+      performAnalysis();
+    }
+  }, [answer, question, open]);
+
+  if (!open) return null;
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>Detailed Analysis</DialogTitle>
+      <DialogTitle>
+        <Typography variant="h5">Detailed Analysis</Typography>
+      </DialogTitle>
       <DialogContent>
-        {/* Question */}
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="h6" gutterBottom>Question</Typography>
-          <Typography variant="body1" color="text.secondary">
-            {question}
-          </Typography>
-        </Box>
-
-        {/* Answer */}
-        <Paper sx={{ p: 2, mb: 2 }}>
-          <Typography variant="h6" gutterBottom>Your Answer</Typography>
-          {answer.mediaUrl ? (
-            <Box sx={{ mb: 2 }}>
-              {answer.mediaType === 'video' ? (
-                <video controls src={answer.mediaUrl} style={{ maxWidth: '100%', maxHeight: '300px' }} />
-              ) : (
-                <audio controls src={answer.mediaUrl} />
-              )}
+        {loading ? (
+          <Box display="flex" justifyContent="center" alignItems="center" minHeight={400}>
+            <CircularProgress />
+          </Box>
+        ) : error ? (
+          <Alert severity="error">{error}</Alert>
+        ) : analysis ? (
+          <Box sx={{ mt: 2 }}>
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" gutterBottom>
+                Question:
+              </Typography>
+              <Typography>{question}</Typography>
             </Box>
-          ) : null}
-          {answer.text && (
-            <Typography variant="body1" color="text.secondary">
-              {answer.text}
-            </Typography>
-          )}
-        </Paper>
 
-        {/* Transcription */}
-        {transcription && (
-          <Paper sx={{ p: 2, mb: 2 }}>
-            <Typography variant="h6" gutterBottom>Transcription</Typography>
-            <Typography variant="body1" color="text.secondary">
-              {transcription}
-            </Typography>
-          </Paper>
-        )}
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" gutterBottom>
+                Your Answer:
+              </Typography>
+              <Typography>
+                {answer.transcription || answer.text}
+              </Typography>
+            </Box>
 
-        {/* Score */}
-        <Paper sx={{ p: 2, mb: 2 }}>
-          <Typography variant="h6" gutterBottom>Overall Score</Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-            <LinearProgress
-              variant="determinate"
-              value={(score / 5) * 100}
-              sx={{ flexGrow: 1, mr: 1 }}
-            />
-            <Typography variant="body1">
-              {score.toFixed(1)}/5
-            </Typography>
+            {answer.transcription && (
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="subtitle1" gutterBottom>
+                  Transcription:
+                </Typography>
+                <Typography>
+                  {answer.transcription}
+                </Typography>
+              </Box>
+            )}
+
+            <Divider sx={{ my: 3 }} />
+
+            <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Star color="primary" />
+              <Typography variant="h6">
+                Overall Score: {analysis.score}/5
+              </Typography>
+            </Box>
+
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Feedback color="primary" />
+                Feedback:
+              </Typography>
+              <Typography>
+                {analysis.feedback}
+              </Typography>
+            </Box>
+
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <TrendingUp color="success" />
+                Strong Points:
+              </Typography>
+              <List>
+                {analysis.strong_points.map((point, index) => (
+                  <ListItem key={index}>
+                    <ListItemIcon>
+                      <CheckCircle color="success" />
+                    </ListItemIcon>
+                    <ListItemText primary={point} />
+                  </ListItem>
+                ))}
+              </List>
+            </Box>
+
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Warning color="warning" />
+                Areas for Improvement:
+              </Typography>
+              <List>
+                {analysis.improvement_points.map((point, index) => (
+                  <ListItem key={index}>
+                    <ListItemIcon>
+                      <Warning color="warning" />
+                    </ListItemIcon>
+                    <ListItemText primary={point} />
+                  </ListItem>
+                ))}
+              </List>
+            </Box>
+
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Build color="primary" />
+                Structure Analysis:
+              </Typography>
+              <Typography>
+                {analysis.structure_analysis}
+              </Typography>
+            </Box>
+
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Build color="primary" />
+                Technical Accuracy:
+              </Typography>
+              <Typography>
+                {analysis.technical_accuracy}
+              </Typography>
+            </Box>
+
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Chat color="primary" />
+                Communication Style:
+              </Typography>
+              <Typography>
+                {analysis.communication_style}
+              </Typography>
+            </Box>
+
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Task color="primary" />
+                Action Items:
+              </Typography>
+              <List>
+                {analysis.action_items.map((item, index) => (
+                  <ListItem key={index}>
+                    <ListItemIcon>
+                      <Assignment color="primary" />
+                    </ListItemIcon>
+                    <ListItemText primary={item} />
+                  </ListItem>
+                ))}
+              </List>
+            </Box>
           </Box>
-        </Paper>
-
-        {/* Sentiment Analysis */}
-        <Paper sx={{ p: 2, mb: 2 }}>
-          <Typography variant="h6" gutterBottom>Sentiment Analysis</Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-            <LinearProgress
-              variant="determinate"
-              value={sentiment.score * 100}
-              sx={{ flexGrow: 1, mr: 1 }}
-            />
-            <Typography variant="body1">
-              {sentiment.label}
-            </Typography>
-          </Box>
-        </Paper>
-
-        {/* Cohere AI Feedback */}
-        <Paper sx={{ p: 2, mb: 2 }}>
-          <Typography variant="h6" gutterBottom>AI Feedback</Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ whiteSpace: 'pre-line' }}>
-            {feedback}
-          </Typography>
-        </Paper>
-
-        {/* Positive Comments */}
-        {comments.length > 0 && (
-          <Paper sx={{ p: 2, mb: 2 }}>
-            <Typography variant="h6" gutterBottom>Positive Points</Typography>
-            <List>
-              {comments.map((comment, index) => (
-                <ListItem key={index}>
-                  <ListItemText primary={comment} />
-                </ListItem>
-              ))}
-            </List>
-          </Paper>
-        )}
-
-        {/* Suggestions for Improvement */}
-        {suggestions.length > 0 && (
-          <Paper sx={{ p: 2, mb: 2 }}>
-            <Typography variant="h6" gutterBottom>Suggestions for Improvement</Typography>
-            <List>
-              {suggestions.map((suggestion, index) => (
-                <ListItem key={index}>
-                  <ListItemText primary={suggestion} />
-                </ListItem>
-              ))}
-            </List>
-          </Paper>
-        )}
-
-        {/* Areas for Improvement */}
-        {improvement_points.length > 0 && (
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>Areas for Improvement</Typography>
-            <List>
-              {improvement_points.map((point, index) => (
-                <ListItem key={index}>
-                  <ListItemText primary={point} />
-                </ListItem>
-              ))}
-            </List>
-          </Paper>
-        )}
+        ) : null}
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Close</Button>
-      </DialogActions>
     </Dialog>
   );
 };
