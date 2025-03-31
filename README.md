@@ -1,78 +1,139 @@
-# AI Interview Platform
+# AI Interview Assistant
 
-An intelligent interview platform that provides real-time feedback and analysis during technical interviews.
+An intelligent interview preparation and practice platform that helps users prepare for technical interviews using AI-powered feedback and analysis.
 
 ## Features
 
-### 1. Multi-Modal Interview Responses
-- Text-based answers
-- Audio recording support
-- Video recording support
-- Real-time transcription of audio/video responses
-- Multi-language support (English, French, Arabic)
+- **Multi-language Support**: Practice interviews in English, French, and Arabic
+- **AI-Powered Analysis**: Get detailed feedback on your answers using advanced AI models
+- **Real-time Feedback**: Receive instant feedback on your responses
+- **Progress Tracking**: Track your interview preparation progress
+- **Detailed Analytics**: View comprehensive analysis of your interview performance
+- **Audio/Video Recording**: Record your answers using audio or video for more realistic practice
+- **Speech-to-Text**: Automatic transcription of audio/video recordings for analysis
+- **Sentiment Analysis**: Get insights into your communication style and tone
+- **Performance Metrics**: Track your scores and improvement areas
 
-### 2. AI-Powered Analysis
-- Sentiment analysis of responses
-- Content relevance scoring
-- Quality metrics analysis
-- Detailed feedback generation
-- Improvement suggestions
+## Tech Stack
 
-### 3. Interview Dashboard
-- View past interviews
-- Access detailed analysis of each response
-- Track performance over time
-- Review transcriptions alongside recordings
-- Score tracking and feedback history
+### Frontend
+- React with TypeScript
+- Material-UI for components
+- Redux Toolkit for state management
+- i18next for internationalization
+- MediaRecorder API for audio/video recording
 
-### 4. Technical Features
-- AssemblyAI integration for accurate transcription
-- Real-time audio/video processing
-- Secure file handling
-- Responsive design
-- Cross-browser compatibility
+### Backend
+- FastAPI (Python)
+- Cohere AI for sentiment analysis and feedback generation
+- Whisper API for speech-to-text transcription
+- SQLAlchemy for database operations
+- Pydantic for data validation
 
 ## Getting Started
 
 ### Prerequisites
 - Node.js (v14 or higher)
 - Python 3.8+
-- FFmpeg (for audio processing)
-- AssemblyAI API key
+- Cohere AI API key
+- Whisper API access
 
-### Environment Setup
-1. Clone the repository
+### Environment Variables
+Create a `.env` file in the frontend directory:
+```env
+REACT_APP_API_URL=http://localhost:8000
+REACT_APP_COHERE_API_KEY=your_cohere_api_key
+```
+
+Create a `.env` file in the backend directory:
+```env
+DATABASE_URL=sqlite:///./interview.db
+COHERE_API_KEY=your_cohere_api_key
+WHISPER_API_KEY=your_whisper_api_key
+```
+
+### Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/ai-interview-assistant.git
+cd ai-interview-assistant
+```
+
 2. Install frontend dependencies:
-   ```bash
-   cd frontend
-   npm install
-   ```
+```bash
+cd frontend
+npm install
+```
+
 3. Install backend dependencies:
-   ```bash
-   cd backend
-   pip install -r requirements.txt
-   ```
-4. Set up environment variables:
-   - Frontend (.env):
-     ```
-     REACT_APP_API_URL=http://localhost:8000
-     ```
-   - Backend (.env):
-     ```
-     ASSEMBLY_AI_TOKEN=your_assembly_ai_token
-     ```
+```bash
+cd backend
+pip install -r requirements.txt
+```
+
+4. Set up the database:
+```bash
+cd backend
+alembic upgrade head
+```
 
 ### Running the Application
+
 1. Start the backend server:
-   ```bash
-   cd backend
-   uvicorn app.main:app --reload
-   ```
+```bash
+cd backend
+uvicorn main:app --reload
+```
+
 2. Start the frontend development server:
-   ```bash
-   cd frontend
-   npm start
-   ```
+```bash
+cd frontend
+npm start
+```
+
+The application will be available at `http://localhost:3000`.
+
+## Usage
+
+1. **Start a New Interview**:
+   - Select your preferred language
+   - Choose a job title or enter a custom one
+   - Click "Start Interview"
+
+2. **Answer Questions**:
+   - Type your answer in the text field
+   - Or record audio/video using the media recorder
+   - Get real-time feedback on your responses
+
+3. **View Analysis**:
+   - Click "View Detailed Analysis" for comprehensive feedback
+   - See your score, sentiment analysis, and improvement suggestions
+   - Review transcribed audio/video recordings
+
+4. **Track Progress**:
+   - View your interview history
+   - Track your scores and improvement areas
+   - Compare performance across different interviews
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- Cohere AI for sentiment analysis and feedback generation
+- Whisper API for speech-to-text transcription
+- Material-UI for the component library
+- React and TypeScript communities
 
 ## Recent Updates
 
@@ -240,71 +301,4 @@ pytest
 ```
 
 ### Frontend Tests
-```bash
-cd frontend
-npm test
 ```
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Running in GitHub Codespaces
-
-When running the application in GitHub Codespaces, follow these additional steps:
-
-### Frontend Setup for Codespaces
-1. Make sure you're in the frontend directory:
-```bash
-cd frontend
-```
-
-2. Install dependencies:
-```bash
-npm install
-```
-
-3. Start the development server:
-```bash
-npm start
-```
-
-The frontend will be available at the Codespace's forwarded port (usually `https://YOUR-CODESPACE-NAME-3000.preview.app.github.dev`)
-
-### Backend Setup for Codespaces
-1. Make sure you're in the backend directory:
-```bash
-cd backend
-```
-
-2. Create and activate the virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-4. Start the backend server:
-```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-The backend API will be available at the Codespace's forwarded port (usually `https://YOUR-CODESPACE-NAME-8000.preview.app.github.dev`)
-
-### Environment Configuration for Codespaces
-Update your frontend `.env` file to use the Codespace URL:
-```env
-REACT_APP_API_URL=https://YOUR-CODESPACE-NAME-8000.preview.app.github.dev
-``` 

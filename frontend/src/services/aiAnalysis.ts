@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { AIAnalysisResult } from '../types/interview';
+import { API_BASE_URL } from '../config';
 
 // Validate environment variables
 console.log('Environment check:', {
@@ -8,9 +9,10 @@ console.log('Environment check:', {
 });
 
 // API endpoints
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 const SENTIMENT_API_URL = `${API_BASE_URL}/api/v1/sentiment/analyze`;
 const TRANSCRIPTION_API_URL = `${API_BASE_URL}/api/v1/transcription/transcribe`;
+
+const COHERE_API_KEY = process.env.REACT_APP_COHERE_API_KEY;
 
 // Add retry logic
 const MAX_RETRIES = 3;
@@ -172,201 +174,148 @@ async function blobUrlToFile(blobUrl: string, mediaType: 'audio' | 'video'): Pro
   }
 }
 
-export async function transcribeMedia(mediaUrl: string, mediaType: 'audio' | 'video'): Promise<string> {
+export const transcribeMedia = async (mediaUrl: string, mediaType: "audio" | "video"): Promise<string> => {
   try {
-    console.log(`Starting ${mediaType} transcription...`);
-    
-    // Convert blob URL to File object
-    const mediaFile = await blobUrlToFile(mediaUrl, mediaType);
-    console.log('File prepared for upload:', {
-      name: mediaFile.name,
-      type: mediaFile.type,
-      size: mediaFile.size
-    });
-    
-    // Validate file before upload
-    if (mediaFile.size === 0) {
-      throw new Error('File is empty');
-    }
+    // Convert Blob URL to Blob
+    const response = await fetch(mediaUrl);
+    const blob = await response.blob();
 
-    if (mediaFile.size > 10 * 1024 * 1024) { // 10MB limit
-      throw new Error('File is too large. Please keep recordings under 10MB.');
-    }
-    
-    // Create FormData and append the file
+    // Create FormData and append the blob
     const formData = new FormData();
-    formData.append('file', mediaFile);
-    
-    let lastError = null;
-    let attempts = 0;
-    const maxAttempts = 3;
-    
-    while (attempts < maxAttempts) {
-      try {
-        console.log(`Attempt ${attempts + 1} of ${maxAttempts}...`);
-        
-        const response = await axios.post(
-          TRANSCRIPTION_API_URL,
-          formData,
-          {
-            headers: {
-              'Content-Type': 'multipart/form-data'
-            },
-            timeout: 60000 // 60 seconds timeout for large files
-          }
-        );
+    formData.append('file', blob, `recording.${mediaType === 'audio' ? 'wav' : 'mp4'}`);
+    formData.append('mediaType', mediaType);
 
-        console.log('Transcription response:', response.data);
-
-        if (!response.data.transcription && response.data.message) {
-          console.warn('Transcription warning:', response.data.message);
-          throw new Error(response.data.message);
-        }
-
-        return response.data.transcription || '';
-      } catch (error: any) {
-        lastError = error;
-        attempts++;
-        
-        // If it's a 503 error (service unavailable), wait before retrying
-        if (error.response?.status === 503) {
-          console.log(`Service unavailable (attempt ${attempts}/${maxAttempts}), waiting before retry...`);
-          await new Promise(resolve => setTimeout(resolve, 2000 * attempts)); // Exponential backoff
-          continue;
-        }
-        
-        // For other errors, throw immediately
-        throw error;
-      }
-    }
-    
-    // If we get here, all attempts failed
-    throw new Error(`Transcription failed after ${maxAttempts} attempts: ${lastError?.message}`);
-  } catch (error: any) {
-    console.error('Transcription error:', {
-      message: error.message,
-      response: error.response?.data,
-      status: error.response?.status
+    const transcriptionResponse = await fetch(`${API_BASE_URL}/api/v1/transcription/transcribe`, {
+      method: 'POST',
+      body: formData,
     });
-    
-    // Provide a more user-friendly error message
-    let errorMessage = 'Error transcribing audio';
-    if (error.response?.status === 503) {
-      errorMessage = 'The transcription service is temporarily unavailable. Please try again in a few moments.';
-    } else if (error.response?.status === 400) {
-      errorMessage = 'Invalid audio format. Please try recording again.';
-    } else if (error.message.includes('timeout')) {
-      errorMessage = 'The transcription request timed out. Please try a shorter recording.';
+
+    if (!transcriptionResponse.ok) {
+      console.error('Transcription failed:', transcriptionResponse.status, transcriptionResponse.statusText);
+      return ''; // Return empty string instead of throwing
     }
-    
-    throw new Error(errorMessage);
+
+    const data = await transcriptionResponse.json();
+    return data.transcription || '';
+  } catch (error) {
+    console.error('Error transcribing media:', error);
+    return ''; // Return empty string instead of throwing
   }
-}
+};
 
 export const analyzeAnswer = async (
   text: string,
   mediaUrl?: string,
-  mediaType?: 'audio' | 'video',
+  mediaType?: "audio" | "video",
   question?: string
 ): Promise<AIAnalysisResult> => {
   try {
-    let transcription: string | undefined;
-    
-    console.log('analyzeAnswer called with:', {
-      text: text.substring(0, 100),
-      mediaUrl: mediaUrl ? 'present' : 'absent',
-      mediaType,
-      question
-    });
-    
-    // If media URL is provided, transcribe it first
+    // First, get transcription if media is provided
+    let transcription = '';
     if (mediaUrl && mediaType) {
-      try {
-        console.log('Starting media transcription...');
-        transcription = await transcribeMedia(mediaUrl, mediaType);
-        console.log('Transcription completed:', transcription?.substring(0, 100));
-      } catch (error) {
-        console.error('Transcription failed:', error);
-        // Continue with analysis even if transcription fails
-      }
+      transcription = await transcribeMedia(mediaUrl, mediaType);
     }
 
-    // Send both text and transcription for analysis
-    const response = await retry(async () => {
-      console.log('Sending analysis request with:', {
-        text: text.substring(0, 100),
-        transcription: transcription?.substring(0, 100),
-        question,
-        mediaUrl: mediaUrl ? 'present' : 'absent',
-        mediaType
-      });
+    // Prepare the text for analysis
+    const textToAnalyze = transcription || text;
 
-      const result = await axios.post(SENTIMENT_API_URL, {
-        text,
-        question,
-        transcription
-      }, {
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000 // 30 second timeout
-      });
-
-      console.log('Raw API response:', result.data);
-      return result;
-    });
-
-    // Log the response data before transformation
-    console.log('API response data:', {
-      sentiment: response.data.sentiment,
-      hasTranscription: !!response.data.transcription,
-      hasContentAnalysis: !!response.data.content_analysis,
-      hasQualityMetrics: !!response.data.quality_metrics,
-      feedback: response.data.feedback?.length,
-      improvementPoints: response.data.improvement_points?.length
-    });
-
-    // Validate and transform the response
-    const analysisResult: AIAnalysisResult = {
-      sentiment: {
-        label: response.data.sentiment.label || 'NEUTRAL',
-        score: response.data.sentiment.score || 0.5
+    // Call Cohere API for sentiment analysis
+    const sentimentResponse = await fetch('https://api.cohere.ai/v1/classify', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${COHERE_API_KEY}`,
+        'Content-Type': 'application/json',
       },
-      transcription: transcription || response.data.transcription,
-      content_analysis: response.data.content_analysis ? {
-        relevance_score: response.data.content_analysis.relevance_score || 0,
-        similarity_score: response.data.content_analysis.similarity_score || 0,
-        rerank_score: response.data.content_analysis.rerank_score || 0,
-        feedback: {
-          relevant_points: response.data.content_analysis.feedback?.relevant_points || [],
-          missing_points: response.data.content_analysis.feedback?.missing_points || [],
-          off_topic_content: response.data.content_analysis.feedback?.off_topic_content || []
-        }
-      } : undefined,
-      quality_metrics: response.data.quality_metrics ? {
-        has_gibberish: response.data.quality_metrics.has_gibberish || false,
-        has_meaningful_structure: response.data.quality_metrics.has_meaningful_structure || false,
-        avg_sentence_length: response.data.quality_metrics.avg_sentence_length || 0,
-        sentence_count: response.data.quality_metrics.sentence_count || 0,
-        excessive_repetition: response.data.quality_metrics.excessive_repetition || false,
-        word_count: response.data.quality_metrics.word_count || 0
-      } : undefined,
-      score: response.data.score || 0,
-      feedback: response.data.feedback || [],
-      improvement_points: response.data.improvement_points || []
-    };
-
-    console.log('Transformed analysis result:', {
-      hasTranscription: !!analysisResult.transcription,
-      hasContentAnalysis: !!analysisResult.content_analysis,
-      hasQualityMetrics: !!analysisResult.quality_metrics,
-      feedback: analysisResult.feedback.length,
-      improvementPoints: analysisResult.improvement_points.length
+      body: JSON.stringify({
+        model: 'large',
+        inputs: [textToAnalyze],
+        examples: [
+          { text: "This is a great answer with clear examples and professional tone", label: "POSITIVE" },
+          { text: "The response is unclear and lacks structure", label: "NEGATIVE" },
+          { text: "The answer is okay but could use more details", label: "NEUTRAL" }
+        ]
+      })
     });
 
-    return analysisResult;
+    if (!sentimentResponse.ok) {
+      throw new Error('Sentiment analysis failed');
+    }
+
+    const sentimentData = await sentimentResponse.json();
+    const sentimentScore = sentimentData.classifications[0].confidence;
+    const sentimentLabel = sentimentData.classifications[0].prediction;
+
+    // Call Cohere API for text generation to get feedback
+    const feedbackResponse = await fetch('https://api.cohere.ai/v1/generate', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${COHERE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'large',
+        prompt: `Analyze this interview answer and provide constructive feedback:\n\nAnswer: ${textToAnalyze}\n\nProvide feedback in the following format:\nScore (0-5): [number]\nComments: [list of positive points]\nSuggestions: [list of improvement suggestions]\n\nFeedback:`,
+        max_tokens: 300,
+        temperature: 0.7,
+        k: 0,
+        stop_sequences: ["\n\n"],
+        return_likelihoods: "NONE"
+      })
+    });
+
+    if (!feedbackResponse.ok) {
+      throw new Error('Feedback generation failed');
+    }
+
+    const feedbackData = await feedbackResponse.json();
+    const feedbackText = feedbackData.generations[0].text;
+
+    // Parse the feedback text
+    const scoreMatch = feedbackText.match(/Score \(0-5\): (\d+(\.\d+)?)/);
+    const commentsMatch = feedbackText.match(/Comments: (.*?)(?=Suggestions:|$)/);
+    const suggestionsMatch = feedbackText.match(/Suggestions: (.*?)$/);
+
+    const score = scoreMatch ? parseFloat(scoreMatch[1]) : 3.0;
+    const comments = commentsMatch ? commentsMatch[1].split('\n').filter(Boolean) : [];
+    const suggestions = suggestionsMatch ? suggestionsMatch[1].split('\n').filter(Boolean) : [];
+
+    // Calculate improvement points based on sentiment and feedback
+    const improvement_points: string[] = [];
+    if (sentimentScore < 0.6) {
+      improvement_points.push("Consider using a more professional and confident tone");
+    }
+    if (textToAnalyze.split(' ').length < 50) {
+      improvement_points.push("Provide more detailed examples and explanations");
+    }
+    if (!textToAnalyze.includes('because') && !textToAnalyze.includes('therefore')) {
+      improvement_points.push("Add more logical connections between ideas");
+    }
+
+    return {
+      score,
+      feedback: feedbackText,
+      comments,
+      suggestions,
+      sentiment: {
+        score: sentimentScore,
+        label: sentimentLabel
+      },
+      improvement_points,
+      transcription: transcription || undefined
+    };
   } catch (error) {
     console.error('Error analyzing answer:', error);
-    throw new Error('Failed to analyze answer');
+    return {
+      score: 0,
+      feedback: "Error analyzing answer. Please try again.",
+      comments: [],
+      suggestions: ["Please try again with your answer"],
+      sentiment: {
+        score: 0.5,
+        label: "NEUTRAL"
+      },
+      improvement_points: ["Unable to analyze answer at this time"],
+      transcription: undefined
+    };
   }
 }; 
