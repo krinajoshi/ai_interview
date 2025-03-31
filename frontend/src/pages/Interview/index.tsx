@@ -1,13 +1,34 @@
-import * as React from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { useAppDispatch, useAppSelector } from '../../store';
+import {
+  setJobTitle,
+  setQuestions,
+  setAnswer,
+  nextQuestion,
+  previousQuestion,
+  completeInterview,
+  resetInterview,
+  setLanguage,
+  startInterview,
+  setLoading,
+  setError,
+} from '../../features/interview/interviewSlice';
+import { Answer, Question, AIAnalysisResult } from '../../types/interview';
+import { analyzeAnswer, transcribeMedia } from '../../services/aiAnalysis';
+import DetailedAnalysis from '../../components/DetailedAnalysis';
+import InterviewSetup from './Setup';
+import MediaRecorder from '../../components/MediaRecorder';
+import LanguageSelector from '../../components/LanguageSelector';
+import { Language } from '../../components/LanguageSelector';
 import {
   Container,
   Box,
   Typography,
-  Paper,
-  TextField,
   Button,
+  TextField,
+  Paper,
   CircularProgress,
   Stepper,
   Step,
@@ -16,24 +37,12 @@ import {
   Card,
   CardContent,
   IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import { Analytics as AnalyticsIcon } from '@mui/icons-material';
-import { useAppDispatch, useAppSelector } from '../../store';
-import {
-  setAnswer,
-  nextQuestion,
-  previousQuestion,
-  completeInterview,
-  resetInterview,
-  setLanguage,
-} from '../../features/interview/interviewSlice';
-import { Answer, Question, AIAnalysisResult } from '../../types/interview';
-import { Language } from '../../components/LanguageSelector';
-import InterviewSetup from './Setup';
-import MediaRecorder from '../../components/MediaRecorder';
-import LanguageSelector from '../../components/LanguageSelector';
-import { analyzeAnswer, transcribeMedia } from '../../services/aiAnalysis';
-import DetailedAnalysis from '../../components/DetailedAnalysis';
 
 const getLanguageSpecificFeedback = async (answer: Answer, questionText: string, language: Language): Promise<Answer['feedback']> => {
   try {
@@ -213,13 +222,13 @@ const getLanguageSpecificFeedback = async (answer: Answer, questionText: string,
 };
 
 const Interview: React.FC = () => {
-  const { t } = useTranslation();
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [showDetailedAnalysis, setShowDetailedAnalysis] = React.useState(false);
   const [currentAnalysis, setCurrentAnalysis] = React.useState<AIAnalysisResult | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = React.useState(false);
 
   const {
     questions,
@@ -414,32 +423,82 @@ const Interview: React.FC = () => {
     navigate('/dashboard');
   };
 
-  const handleAnalyzeClick = async () => {
-    if (currentQuestionIndex < 0 || currentQuestionIndex >= answers.length) return;
+  const handleMediaRecordingComplete = (mediaBlob: Blob | null, type: 'audio' | 'video' | null) => {
+    if (!mediaBlob || !type) {
+      // If mediaBlob is null, it means the recording was deleted
+      setCurrentAnswer(prev => ({
+        ...prev,
+        mediaUrl: undefined,
+        mediaType: undefined,
+        transcription: undefined
+      }));
+      return;
+    }
+
+    // Create a Blob URL for preview
+    const mediaUrl = URL.createObjectURL(mediaBlob);
     
-    const currentAnswer = answers[currentQuestionIndex];
-    if (!currentAnswer) return;
+    // Store the actual Blob for later use
+    setCurrentAnswer(prev => ({
+      ...prev,
+      mediaUrl,
+      mediaType: type,
+      mediaBlob // Store the actual Blob
+    }));
+  };
 
-    setLoading(true);
-    setError(null);
-
+  const handleAnalyzeAnswer = async () => {
     try {
-      if (currentQuestionIndex < 0 || currentQuestionIndex >= questions.length) return;
-      
-      const currentQuestion = questions[currentQuestionIndex];
-      if (!currentQuestion) return;
+      setLoading(true);
+      setError(null);
 
-      const analysis = await analyzeAnswer(
-        currentAnswer.text,
+      // Get the current question
+      const currentQuestion = questions[currentQuestionIndex];
+      if (!currentQuestion) {
+        throw new Error('No question found');
+      }
+
+      // Get the current answer
+      const currentAnswer = answers[currentQuestionIndex];
+      if (!currentAnswer) {
+        throw new Error('No answer found');
+      }
+
+      // Get transcription if media is provided
+      let transcription = '';
+      if (currentAnswer.mediaUrl && currentAnswer.mediaType) {
+        try {
+          transcription = await transcribeMedia(currentAnswer.mediaUrl, currentAnswer.mediaType);
+        } catch (error) {
+          console.error('Transcription failed:', error);
+          // Continue with analysis even if transcription fails
+        }
+      }
+
+      // Analyze the answer
+      const analysisResult = await analyzeAnswer(
+        currentAnswer.text || transcription || '',
         currentAnswer.mediaUrl,
         currentAnswer.mediaType,
-        currentQuestion.text[selectedLanguage as keyof typeof currentQuestion.text]
+        currentQuestion.text[selectedLanguage]
       );
-      setCurrentAnalysis(analysis);
+
+      // Update the answer with the analysis
+      const updatedAnswer = {
+        ...currentAnswer,
+        analysis: analysisResult,
+        transcription: transcription || undefined
+      };
+
+      // Update the answer in the store
+      dispatch(setAnswer({ questionIndex: currentQuestionIndex, answer: updatedAnswer }));
+
+      // Set the current analysis for display
+      setCurrentAnalysis(analysisResult);
       setShowDetailedAnalysis(true);
     } catch (err) {
-      setError('Failed to analyze answer. Please try again.');
-      console.error('Analysis error:', err);
+      console.error('Error analyzing answer:', err);
+      setError(err instanceof Error ? err.message : 'Failed to analyze answer');
     } finally {
       setLoading(false);
     }
@@ -476,26 +535,6 @@ const Interview: React.FC = () => {
       </Container>
     );
   }
-
-  const handleMediaRecordingComplete = (mediaBlob: Blob | null, type: 'audio' | 'video' | null) => {
-    if (!mediaBlob || !type) {
-      // If mediaBlob is null, it means the recording was deleted
-      setCurrentAnswer(prev => ({
-        ...prev,
-        mediaUrl: undefined,
-        mediaType: undefined
-      }));
-      return;
-    }
-
-    // In production, you would upload this to a server and get a URL back
-    const mediaUrl = URL.createObjectURL(mediaBlob);
-    setCurrentAnswer(prev => ({
-      ...prev,
-      mediaUrl,
-      mediaType: type
-    }));
-  };
 
   if (isInterviewComplete) {
     console.log('Showing completion screen');
@@ -686,7 +725,7 @@ const Interview: React.FC = () => {
               <Button
                 variant="outlined"
                 color="primary"
-                onClick={handleAnalyzeClick}
+                onClick={handleAnalyzeAnswer}
                 startIcon={<AnalyticsIcon />}
                 disabled={loading}
               >
@@ -704,6 +743,7 @@ const Interview: React.FC = () => {
           onClose={() => setShowDetailedAnalysis(false)}
           analysis={currentAnalysis}
           question={questions[currentQuestionIndex].text[selectedLanguage]}
+          answer={currentAnswer}
         />
       )}
     </Container>

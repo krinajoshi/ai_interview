@@ -48,30 +48,14 @@ export interface InterviewState {
 }
 
 export interface AIAnalysisResult {
-  sentiment: {
-    label: string;
-    score: number;
-  };
-  transcription?: string;
-  content_analysis?: {
-    relevance_score: number;
-    similarity_score: number;
-    rerank_score: number;
-    feedback: {
-      relevant_points: string[];
-      missing_points: string[];
-      off_topic_content: string[];
-    };
-  };
-  quality_metrics?: {
-    has_gibberish: boolean;
-    has_meaningful_structure: boolean;
-    avg_sentence_length: number;
-    sentence_count: number;
-    excessive_repetition: boolean;
-    word_count: number;
-  };
   score: number;
-  feedback: string[];
+  feedback: string;
+  comments: string[];
+  suggestions: string[];
+  sentiment: {
+    score: number;
+    label: string;
+  };
   improvement_points: string[];
+  transcription?: string;
 } 
