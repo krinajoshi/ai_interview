@@ -241,6 +241,8 @@ const Interview: React.FC = () => {
   } = useAppSelector((state) => state.interview);
 
   const [currentAnswer, setCurrentAnswer] = React.useState<Answer>({ text: '' });
+  const [currentMediaBlob, setCurrentMediaBlob] = React.useState<Blob | null>(null);
+  const [currentMediaType, setCurrentMediaType] = React.useState<'audio' | 'video' | null>(null);
 
   React.useEffect(() => {
     if (isInterviewStarted && questions.length > 0 && currentQuestionIndex >= 0) {
@@ -304,76 +306,6 @@ const Interview: React.FC = () => {
 
   const handleCompleteInterview = async () => {
     try {
-      const simplifiedQuestions = questions.map((q: Question) => ({
-        id: q.id,
-        text: q.text[selectedLanguage],
-        type: q.type
-      }));
-
-      // Save to localStorage before completing
-      const interviewData = {
-        jobTitle,
-        questions: simplifiedQuestions,
-        answers: answers.map((answer: Answer, index: number) => ({
-          questionIndex: index,
-          text: answer.text,
-          mediaUrl: answer.mediaUrl,
-          mediaType: answer.mediaType,
-          feedback: answer.feedback,
-          transcription: answer.transcription || ''
-        })),
-        completedAt: new Date().toISOString(),
-        language: selectedLanguage
-      };
-      localStorage.setItem('lastInterview', JSON.stringify(interviewData));
-
-      dispatch(completeInterview());
-      navigate('/dashboard');
-    } catch (err) {
-      console.error('Error completing interview:', err);
-      setError('Failed to complete interview. Please try again.');
-    }
-  };
-
-  const handlePreviousQuestion = () => {
-    dispatch(previousQuestion());
-  };
-
-  const handleNext = async () => {
-    const currentQuestion = questions[currentQuestionIndex];
-    
-    // Analyze the answer with language-specific feedback
-    const feedback = await getLanguageSpecificFeedback(
-      currentAnswer, 
-      currentQuestion.text[selectedLanguage],
-      selectedLanguage
-    );
-    
-    // Get transcription if available
-    let transcription = '';
-    if (currentAnswer.mediaUrl && currentAnswer.mediaType) {
-      try {
-        transcription = await transcribeMedia(currentAnswer.mediaUrl, currentAnswer.mediaType);
-      } catch (error) {
-        console.error('Transcription failed:', error);
-      }
-    }
-    
-    const answerWithFeedback = {
-      ...currentAnswer,
-      feedback,
-      transcription
-    };
-
-    // Save the current answer
-    dispatch(setAnswer({ 
-      answer: answerWithFeedback,
-      questionIndex: currentQuestionIndex 
-    }));
-
-    if (currentQuestionIndex < questions.length - 1) {
-      dispatch(nextQuestion());
-    } else {
       // Transform questions to match Dashboard's expected format
       const simplifiedQuestions = questions.map(q => ({
         id: q.id,
@@ -383,7 +315,9 @@ const Interview: React.FC = () => {
 
       // Get all answers including the last one
       const allAnswers = [...answers];
-      allAnswers[currentQuestionIndex] = answerWithFeedback; // Ensure last answer is included
+      if (currentAnswer.text.trim() || currentAnswer.mediaUrl) {
+        allAnswers[currentQuestionIndex] = currentAnswer;
+      }
 
       // Save to localStorage before completing
       const interviewData = {
@@ -400,12 +334,78 @@ const Interview: React.FC = () => {
         completedAt: new Date().toISOString(),
         language: selectedLanguage
       };
+
+      // Get existing interviews
       const pastInterviews = JSON.parse(localStorage.getItem('pastInterviews') || '[]');
+      
+      // Add new interview
       pastInterviews.push(interviewData);
+      
+      // Save back to localStorage
       localStorage.setItem('pastInterviews', JSON.stringify(pastInterviews));
+      
+      // Also save as last interview
+      localStorage.setItem('lastInterview', JSON.stringify(interviewData));
 
       // Complete the interview and navigate to dashboard
       dispatch(completeInterview());
+      navigate('/dashboard');
+    } catch (err) {
+      console.error('Error completing interview:', err);
+      setError('Failed to complete interview. Please try again.');
+    }
+  };
+
+  const handlePreviousQuestion = () => {
+    dispatch(previousQuestion());
+  };
+
+  const handleNext = async () => {
+    if (!currentAnswer.text.trim() && !currentAnswer.mediaUrl) {
+      setError('Please provide an answer before proceeding.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError('');
+
+      // Get transcription for media answers
+      let transcription = '';
+      if (currentAnswer.mediaUrl && currentAnswer.mediaType) {
+        try {
+          transcription = await transcribeMedia(currentAnswer.mediaUrl, currentAnswer.mediaType);
+        } catch (error) {
+          console.error('Transcription failed:', error);
+          // Continue even if transcription fails
+        }
+      }
+
+      // Save the current answer
+      dispatch(setAnswer({
+        questionIndex: currentQuestionIndex,
+        answer: {
+          text: currentAnswer.text,
+          mediaUrl: currentAnswer.mediaUrl,
+          mediaType: currentAnswer.mediaType,
+          transcription: transcription
+        }
+      }));
+
+      // Move to next question
+      if (currentQuestionIndex < questions.length - 1) {
+        dispatch(nextQuestion());
+        setCurrentAnswer({ text: '' });
+        setError('');
+      } else {
+        // If it's the last question, complete the interview
+        await handleCompleteInterview();
+      }
+    } catch (error) {
+      console.error('Error in handleNext:', error);
+      setError('Failed to process your answer. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -438,18 +438,17 @@ const Interview: React.FC = () => {
     // Create a Blob URL for preview
     const mediaUrl = URL.createObjectURL(mediaBlob);
     
-    // Store the actual Blob for later use
+    // Update the current answer with the media
     setCurrentAnswer(prev => ({
       ...prev,
       mediaUrl,
-      mediaType: type,
-      mediaBlob // Store the actual Blob
+      mediaType: type
     }));
   };
 
   const handleAnalyzeAnswer = async () => {
     try {
-      setLoading(true);
+      setIsAnalyzing(true);
       setError(null);
 
       // Get the current question
@@ -500,7 +499,7 @@ const Interview: React.FC = () => {
       console.error('Error analyzing answer:', err);
       setError(err instanceof Error ? err.message : 'Failed to analyze answer');
     } finally {
-      setLoading(false);
+      setIsAnalyzing(false);
     }
   };
 
@@ -720,32 +719,27 @@ const Interview: React.FC = () => {
           </Box>
 
           {/* Add Analysis Button */}
-          {answers[currentQuestionIndex]?.text && (
-            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
-              <Button
-                variant="outlined"
-                color="primary"
-                onClick={handleAnalyzeAnswer}
-                startIcon={<AnalyticsIcon />}
-                disabled={loading}
-              >
-                {loading ? 'Analyzing...' : 'View Detailed Analysis'}
-              </Button>
-            </Box>
-          )}
+          <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={handleAnalyzeAnswer}
+              startIcon={<AnalyticsIcon />}
+              disabled={isAnalyzing || (!currentAnswer.text.trim() && !currentAnswer.mediaUrl)}
+            >
+              {isAnalyzing ? 'Analyzing...' : 'View Detailed Analysis'}
+            </Button>
+          </Box>
         </Paper>
       </Box>
 
       {/* Detailed Analysis Dialog */}
-      {currentAnalysis && (
-        <DetailedAnalysis
-          open={showDetailedAnalysis}
-          onClose={() => setShowDetailedAnalysis(false)}
-          analysis={currentAnalysis}
-          question={questions[currentQuestionIndex].text[selectedLanguage]}
-          answer={currentAnswer}
-        />
-      )}
+      <DetailedAnalysis
+        open={showDetailedAnalysis}
+        onClose={() => setShowDetailedAnalysis(false)}
+        answer={currentAnswer}
+        question={questions[currentQuestionIndex].text[selectedLanguage]}
+      />
     </Container>
   );
 };
