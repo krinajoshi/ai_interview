@@ -104,12 +104,20 @@ The application will be available at `http://localhost:3000`.
 2. **Answer Questions**:
    - Type your answer in the text field
    - Or record audio/video using the media recorder
-   - Get real-time feedback on your responses
+   - Navigate between questions using "Previous" and "Next" buttons
+   - Click "Finish" on the last question to complete the interview
 
 3. **View Analysis**:
-   - Click "View Detailed Analysis" for comprehensive feedback
-   - See your score, sentiment analysis, and improvement suggestions
-   - Review transcribed audio/video recordings
+   - After completing the interview, you'll be redirected to the dashboard
+   - Click "View Responses" on any past interview to see detailed analysis
+   - For each answer, you'll see:
+     - Overall score with rating
+     - Feedback summary
+     - Strong points
+     - Areas for improvement
+     - Technical accuracy
+     - Communication style
+     - Action items
 
 4. **Track Progress**:
    - View your interview history

@@ -15,9 +15,8 @@ import {
   setLoading,
   setError,
 } from '../../features/interview/interviewSlice';
-import { Answer, Question, AIAnalysisResult } from '../../types/interview';
+import { Answer, Question } from '../../types/interview';
 import { analyzeAnswer, transcribeMedia } from '../../services/aiAnalysis';
-import DetailedAnalysis from '../../components/DetailedAnalysis';
 import InterviewSetup from './Setup';
 import MediaRecorder from '../../components/MediaRecorder';
 import LanguageSelector from '../../components/LanguageSelector';
@@ -34,15 +33,7 @@ import {
   Step,
   StepLabel,
   Alert,
-  Card,
-  CardContent,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
 } from '@mui/material';
-import { Analytics as AnalyticsIcon } from '@mui/icons-material';
 
 const getLanguageSpecificFeedback = async (answer: Answer, questionText: string, language: Language): Promise<Answer['feedback']> => {
   try {
@@ -226,9 +217,9 @@ const Interview: React.FC = () => {
   const dispatch = useAppDispatch();
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [showDetailedAnalysis, setShowDetailedAnalysis] = React.useState(false);
-  const [currentAnalysis, setCurrentAnalysis] = React.useState<AIAnalysisResult | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = React.useState(false);
+  const [currentAnswer, setCurrentAnswer] = React.useState<Answer>({ text: '', mediaUrl: '', mediaType: 'audio' });
+  const [currentMediaBlob, setCurrentMediaBlob] = React.useState<Blob | null>(null);
+  const [currentMediaType, setCurrentMediaType] = React.useState<'audio' | 'video' | null>(null);
 
   const {
     questions,
@@ -239,10 +230,6 @@ const Interview: React.FC = () => {
     language: selectedLanguage,
     jobTitle,
   } = useAppSelector((state) => state.interview);
-
-  const [currentAnswer, setCurrentAnswer] = React.useState<Answer>({ text: '', mediaUrl: '', mediaType: 'audio' });
-  const [currentMediaBlob, setCurrentMediaBlob] = React.useState<Blob | null>(null);
-  const [currentMediaType, setCurrentMediaType] = React.useState<'audio' | 'video' | null>(null);
 
   React.useEffect(() => {
     if (isInterviewStarted && questions.length > 0 && currentQuestionIndex >= 0) {
@@ -480,69 +467,6 @@ const Interview: React.FC = () => {
     }));
   };
 
-  const handleAnalyzeAnswer = async () => {
-    try {
-      setIsAnalyzing(true);
-      setError(null);
-
-      // Get the current question
-      const currentQuestion = questions[currentQuestionIndex];
-      if (!currentQuestion) {
-        throw new Error('No question found');
-      }
-
-      // Get the current answer
-      const currentAnswer = answers[currentQuestionIndex];
-      if (!currentAnswer) {
-        throw new Error('No answer found');
-      }
-
-      // Get transcription if media is provided
-      let transcription = '';
-      if (currentAnswer.mediaUrl && currentAnswer.mediaType) {
-        try {
-          transcription = await transcribeMedia(currentAnswer.mediaUrl, currentAnswer.mediaType);
-        } catch (error) {
-          console.error('Transcription failed:', error);
-          // Continue with analysis even if transcription fails
-        }
-      }
-
-      // Analyze the answer
-      const analysisResult = await analyzeAnswer(
-        currentAnswer.text || transcription || '',
-        currentAnswer.mediaUrl,
-        currentAnswer.mediaType,
-        currentQuestion.text[selectedLanguage]
-      );
-
-      // Update the answer with the analysis
-      const updatedAnswer = {
-        ...currentAnswer,
-        analysis: analysisResult,
-        transcription: transcription || undefined
-      };
-
-      // Update the answer in the store
-      dispatch(setAnswer({ questionIndex: currentQuestionIndex, answer: updatedAnswer }));
-
-      // Set the current analysis for display
-      setCurrentAnalysis(analysisResult);
-      setShowDetailedAnalysis(true);
-    } catch (err) {
-      console.error('Error analyzing answer:', err);
-      setError(err instanceof Error ? err.message : 'Failed to analyze answer');
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
-  const handleViewAnalysis = () => {
-    if (currentAnswer && questions[currentQuestionIndex]) {
-      setShowDetailedAnalysis(true);
-    }
-  };
-
   if (!isInterviewStarted) {
     return (
       <Container maxWidth="md">
@@ -702,14 +626,6 @@ const Interview: React.FC = () => {
             </Button>
             <Button
               variant="contained"
-              onClick={handleAnalyzeAnswer}
-              disabled={!currentAnswer.text.trim() && !currentAnswer.mediaUrl || loading}
-              endIcon={loading && <CircularProgress size={20} />}
-            >
-              View Detailed Analysis
-            </Button>
-            <Button
-              variant="contained"
               onClick={handleNext}
               disabled={!currentAnswer.text.trim() && !currentAnswer.mediaUrl || loading}
               endIcon={loading && <CircularProgress size={20} />}
@@ -719,14 +635,6 @@ const Interview: React.FC = () => {
           </Box>
         </Paper>
       </Box>
-
-      {/* Detailed Analysis Dialog */}
-      <DetailedAnalysis
-        open={showDetailedAnalysis}
-        onClose={() => setShowDetailedAnalysis(false)}
-        answer={currentAnswer}
-        question={currentQuestion?.text[selectedLanguage] || ''}
-      />
     </Container>
   );
 };
