@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../../store';
@@ -240,14 +240,14 @@ const Interview: React.FC = () => {
     jobTitle,
   } = useAppSelector((state) => state.interview);
 
-  const [currentAnswer, setCurrentAnswer] = React.useState<Answer>({ text: '' });
+  const [currentAnswer, setCurrentAnswer] = React.useState<Answer>({ text: '', mediaUrl: '', mediaType: 'audio' });
   const [currentMediaBlob, setCurrentMediaBlob] = React.useState<Blob | null>(null);
   const [currentMediaType, setCurrentMediaType] = React.useState<'audio' | 'video' | null>(null);
 
   React.useEffect(() => {
     if (isInterviewStarted && questions.length > 0 && currentQuestionIndex >= 0) {
       const answer = answers[currentQuestionIndex];
-      setCurrentAnswer(answer || { text: '' });
+      setCurrentAnswer(answer || { text: '', mediaUrl: '', mediaType: 'audio' });
     }
   }, [currentQuestionIndex, questions, answers, isInterviewStarted]);
 
@@ -306,12 +306,8 @@ const Interview: React.FC = () => {
 
   const handleCompleteInterview = async () => {
     try {
-      // Transform questions to match Dashboard's expected format
-      const simplifiedQuestions = questions.map(q => ({
-        id: q.id,
-        text: q.text[selectedLanguage],
-        type: q.type
-      }));
+      setLoading(true);
+      setError(null);
 
       // Get all answers including the last one
       const allAnswers = [...answers];
@@ -319,17 +315,53 @@ const Interview: React.FC = () => {
         allAnswers[currentQuestionIndex] = currentAnswer;
       }
 
+      // Analyze each answer
+      const analyzedAnswers = await Promise.all(
+        allAnswers.map(async (answer, index) => {
+          const question = questions[index];
+          let transcription = '';
+          
+          if (answer.mediaUrl && answer.mediaType) {
+            try {
+              transcription = await transcribeMedia(answer.mediaUrl, answer.mediaType);
+            } catch (error) {
+              console.error('Transcription failed:', error);
+            }
+          }
+
+          const analysisResult = await analyzeAnswer(
+            answer.text || transcription || '',
+            answer.mediaUrl,
+            answer.mediaType,
+            question.text[selectedLanguage]
+          );
+
+          return {
+            ...answer,
+            analysis: analysisResult,
+            transcription: transcription || undefined
+          };
+        })
+      );
+
+      // Transform questions to match Dashboard's expected format
+      const simplifiedQuestions = questions.map(q => ({
+        id: q.id,
+        text: q.text[selectedLanguage],
+        type: q.type
+      }));
+
       // Save to localStorage before completing
       const interviewData = {
         jobTitle,
         questions: simplifiedQuestions,
-        answers: allAnswers.map((answer, index) => ({
+        answers: analyzedAnswers.map((answer, index) => ({
           questionIndex: index,
           text: answer.text,
           mediaUrl: answer.mediaUrl,
           mediaType: answer.mediaType,
           transcription: answer.transcription || '',
-          feedback: answer.feedback
+          analysis: answer.analysis
         })),
         completedAt: new Date().toISOString(),
         language: selectedLanguage
@@ -353,6 +385,8 @@ const Interview: React.FC = () => {
     } catch (err) {
       console.error('Error completing interview:', err);
       setError('Failed to complete interview. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -395,7 +429,7 @@ const Interview: React.FC = () => {
       // Move to next question
       if (currentQuestionIndex < questions.length - 1) {
         dispatch(nextQuestion());
-        setCurrentAnswer({ text: '' });
+        setCurrentAnswer({ text: '', mediaUrl: '', mediaType: 'audio' });
         setError('');
       } else {
         // If it's the last question, complete the interview
@@ -426,12 +460,12 @@ const Interview: React.FC = () => {
   const handleMediaRecordingComplete = (mediaBlob: Blob | null, type: 'audio' | 'video' | null) => {
     if (!mediaBlob || !type) {
       // If mediaBlob is null, it means the recording was deleted
-      setCurrentAnswer(prev => ({
-        ...prev,
+      setCurrentAnswer({
+        ...currentAnswer,
         mediaUrl: undefined,
         mediaType: undefined,
         transcription: undefined
-      }));
+      });
       return;
     }
 
@@ -503,6 +537,12 @@ const Interview: React.FC = () => {
     }
   };
 
+  const handleViewAnalysis = () => {
+    if (currentAnswer && questions[currentQuestionIndex]) {
+      setShowDetailedAnalysis(true);
+    }
+  };
+
   if (!isInterviewStarted) {
     return (
       <Container maxWidth="md">
@@ -570,7 +610,7 @@ const Interview: React.FC = () => {
   }
 
   const currentQuestion = questions[currentQuestionIndex];
-  const feedback = currentAnswer.feedback;
+  const feedback = currentAnswer?.feedback;
 
   return (
     <Container maxWidth="lg">
@@ -650,57 +690,23 @@ const Interview: React.FC = () => {
                 } : undefined
               }
             />
-
-            {feedback && (
-              <Card sx={{ mt: 3, bgcolor: 'grey.50' }}>
-                <CardContent>
-                  <Typography variant="h6" gutterBottom>
-                    {selectedLanguage === 'fr' ? 'Analyse de la réponse' :
-                     selectedLanguage === 'ar' ? 'تحليل الإجابة' :
-                     'Answer Analysis'}
-                  </Typography>
-                  <Typography variant="body1" gutterBottom>
-                    {selectedLanguage === 'fr' ? 'Score: ' :
-                     selectedLanguage === 'ar' ? 'النتيجة: ' :
-                     'Score: '}
-                    {feedback.score.toFixed(1)} / 5
-                  </Typography>
-                  
-                  <Typography variant="subtitle1" sx={{ mt: 2 }}>
-                    {selectedLanguage === 'fr' ? 'Points positifs:' :
-                     selectedLanguage === 'ar' ? ':النقاط الإيجابية' :
-                     'Positive Points:'}
-                  </Typography>
-                  <ul>
-                    {feedback.comments.map((comment, index) => (
-                      <li key={index}>{comment}</li>
-                    ))}
-                  </ul>
-
-                  <Typography variant="subtitle1" sx={{ mt: 2 }}>
-                    {selectedLanguage === 'fr' ? 'Suggestions d\'amélioration:' :
-                     selectedLanguage === 'ar' ? ':اقتراحات للتحسين' :
-                     'Suggestions for Improvement:'}
-                  </Typography>
-                  <ul>
-                    {feedback.suggestions.map((suggestion, index) => (
-                      <li key={index}>{suggestion}</li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            )}
           </Box>
 
-          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between' }}>
+          <Box sx={{ mt: 2, display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
             <Button
               variant="outlined"
-              onClick={handlePrevious}
-              disabled={currentQuestionIndex === 0 || loading}
+              onClick={handlePreviousQuestion}
+              disabled={currentQuestionIndex === 0}
             >
-              {selectedLanguage === 'fr' ? 'Question précédente' :
-               selectedLanguage === 'ar' ? 'السؤال السابق' :
-               'Previous Question'}
+              Previous
+            </Button>
+            <Button
+              variant="contained"
+              onClick={handleAnalyzeAnswer}
+              disabled={!currentAnswer.text.trim() && !currentAnswer.mediaUrl || loading}
+              endIcon={loading && <CircularProgress size={20} />}
+            >
+              View Detailed Analysis
             </Button>
             <Button
               variant="contained"
@@ -708,26 +714,7 @@ const Interview: React.FC = () => {
               disabled={!currentAnswer.text.trim() && !currentAnswer.mediaUrl || loading}
               endIcon={loading && <CircularProgress size={20} />}
             >
-              {currentQuestionIndex === questions.length - 1 ?
-                (selectedLanguage === 'fr' ? 'Terminer l\'entretien' :
-                 selectedLanguage === 'ar' ? 'إنهاء المقابلة' :
-                 'Complete Interview') :
-                (selectedLanguage === 'fr' ? 'Question suivante' :
-                 selectedLanguage === 'ar' ? 'السؤال التالي' :
-                 'Next Question')}
-            </Button>
-          </Box>
-
-          {/* Add Analysis Button */}
-          <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
-            <Button
-              variant="outlined"
-              color="primary"
-              onClick={handleAnalyzeAnswer}
-              startIcon={<AnalyticsIcon />}
-              disabled={isAnalyzing || (!currentAnswer.text.trim() && !currentAnswer.mediaUrl)}
-            >
-              {isAnalyzing ? 'Analyzing...' : 'View Detailed Analysis'}
+              {currentQuestionIndex === questions.length - 1 ? 'Finish' : 'Next'}
             </Button>
           </Box>
         </Paper>
@@ -738,7 +725,7 @@ const Interview: React.FC = () => {
         open={showDetailedAnalysis}
         onClose={() => setShowDetailedAnalysis(false)}
         answer={currentAnswer}
-        question={questions[currentQuestionIndex].text[selectedLanguage]}
+        question={currentQuestion?.text[selectedLanguage] || ''}
       />
     </Container>
   );
