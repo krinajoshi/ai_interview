@@ -41,10 +41,15 @@ interface Interview {
     mediaUrl?: string;
     mediaType?: 'audio' | 'video';
     transcription?: string;
-    feedback?: {
+    analysis?: {
       score: number;
-      comments: string[];
-      suggestions: string[];
+      feedback: string;
+      strongPoints: string[];
+      areasForImprovement: string[];
+      structureAnalysis: string;
+      technicalAccuracy: string;
+      communicationStyle: string;
+      actionItems: string[];
     };
   }>;
   completedAt: string;
@@ -66,7 +71,7 @@ const Dashboard: React.FC = () => {
   }, []);
 
   const calculateAverageScore = (interview: Interview) => {
-    const scores = interview.answers.map(answer => answer.feedback?.score || 0);
+    const scores = interview.answers.map(answer => answer.analysis?.score || 0);
     return scores.reduce((a, b) => a + b, 0) / scores.length;
   };
 
@@ -80,74 +85,66 @@ const Dashboard: React.FC = () => {
 
   return (
     <Container maxWidth="lg">
-      <Box sx={{ py: 4 }}>
+      <Box sx={{ mt: 4, mb: 4 }}>
         <Typography variant="h4" gutterBottom>
-          {t('common.dashboard')}
+          {t('dashboard.title')}
         </Typography>
-        
-        <Grid container spacing={3}>
-          {/* Welcome Card */}
-          <Grid item xs={12}>
-            <Paper sx={{ p: 3, mb: 3 }}>
-              <Typography variant="h5" gutterBottom>
-                Welcome back, {user?.name}!
-              </Typography>
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={() => navigate('/interview')}
-                sx={{ mt: 2 }}
-              >
-                {t('Start Interview')}
-              </Button>
-            </Paper>
-          </Grid>
 
-          {/* Past Interviews */}
-          <Grid item xs={12}>
-            <Typography variant="h6" gutterBottom>
-              Past Interviews
+        {/* Welcome Card */}
+        <Grid item xs={12} sx={{ mb: 4 }}>
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="h5" gutterBottom>
+              Welcome back, {user?.name}!
             </Typography>
-            <Grid container spacing={2}>
-              {pastInterviews.map((interview, index) => (
-                <Grid item xs={12} md={4} key={index}>
-                  <Card>
-                    <CardContent>
-                      <Typography variant="h6" gutterBottom>
-                        {interview.jobTitle}
-                      </Typography>
-                      <Typography color="text.secondary">
-                        Date: {new Date(interview.completedAt).toLocaleDateString()}
-                      </Typography>
-                      <Typography color="text.secondary">
-                        Questions: {interview.questions.length}
-                      </Typography>
-                      <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography component="span">Average Score:</Typography>
-                        <Rating 
-                          value={calculateAverageScore(interview) / 5} 
-                          readOnly 
-                          precision={0.1}
-                        />
-                      </Box>
-                    </CardContent>
-                    <CardActions>
-                      <Button 
-                        size="small" 
-                        onClick={() => handleViewResponses(interview)}
-                        startIcon={<AssessmentIcon />}
-                      >
-                        View Detailed Analysis
-                      </Button>
-                    </CardActions>
-                  </Card>
-                </Grid>
-              ))}
-            </Grid>
-          </Grid>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={() => navigate('/interview')}
+              sx={{ mt: 2 }}
+            >
+              Start Interview
+            </Button>
+          </Paper>
         </Grid>
 
-        {/* Interview Responses Dialog */}
+        {/* Past Interviews */}
+        <Typography variant="h6" gutterBottom>
+          Past Interviews
+        </Typography>
+        <Grid container spacing={3}>
+          {pastInterviews.map((interview, index) => (
+            <Grid item xs={12} md={6} key={index}>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom>
+                    {interview.jobTitle}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    {t('dashboard.completedOn')}: {new Date(interview.completedAt).toLocaleString()}
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                    <AssessmentIcon color="primary" />
+                    <Typography variant="body2">
+                      {t('dashboard.averageScore')}: {calculateAverageScore(interview).toFixed(1)}/5
+                    </Typography>
+                  </Box>
+                  <Typography variant="body2">
+                    {t('dashboard.questionsAnswered')}: {interview.answers.length}/{interview.questions.length}
+                  </Typography>
+                </CardContent>
+                <CardActions>
+                  <Button
+                    startIcon={<PlayCircleIcon />}
+                    onClick={() => handleViewResponses(interview)}
+                  >
+                    {t('dashboard.viewResponses')}
+                  </Button>
+                </CardActions>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+
         <Dialog
           open={!!selectedInterview}
           onClose={handleCloseDialog}
@@ -173,9 +170,9 @@ const Dashboard: React.FC = () => {
                           <Typography variant="subtitle1">
                             Q{index + 1}: {question.text}
                           </Typography>
-                          {selectedInterview.answers[index]?.feedback && (
+                          {selectedInterview.answers[index]?.analysis && (
                             <Rating
-                              value={selectedInterview.answers[index].feedback!.score / 5}
+                              value={selectedInterview.answers[index].analysis!.score / 5}
                               readOnly
                               precision={0.1}
                               size="small"
@@ -184,104 +181,72 @@ const Dashboard: React.FC = () => {
                         </Box>
                       }
                       secondary={
-                        <Box sx={{ mt: 1 }}>
-                          {/* Text Answer */}
-                          <Typography
-                            component="div"
-                            variant="body2"
-                            color="text.primary"
-                            sx={{ whiteSpace: 'pre-wrap', mb: 2 }}
-                          >
-                            {selectedInterview.answers[index]?.text || 'No text answer provided'}
+                        <Box sx={{ mt: 2 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            Answer: {selectedInterview.answers[index]?.text || selectedInterview.answers[index]?.transcription || 'No answer provided'}
                           </Typography>
-                          
-                          {/* Media Response */}
-                          {selectedInterview.answers[index]?.mediaUrl && (
-                            <Box sx={{ mt: 2, mb: 2 }}>
-                              <Chip
-                                icon={selectedInterview.answers[index].mediaType === 'video' ? 
-                                  <VideocamIcon /> : <MicIcon />}
-                                label={`${selectedInterview.answers[index].mediaType === 'video' ? 
-                                  'Video' : 'Audio'} Response`}
-                                color="primary"
-                                variant="outlined"
-                                sx={{ mb: 1 }}
-                              />
-                              {selectedInterview.answers[index].mediaType === 'video' ? (
-                                <video
-                                  controls
-                                  src={selectedInterview.answers[index].mediaUrl}
-                                  style={{ maxWidth: '100%' }}
-                                />
-                              ) : (
-                                <audio
-                                  controls
-                                  src={selectedInterview.answers[index].mediaUrl}
-                                  style={{ width: '100%' }}
-                                />
-                              )}
+                          {selectedInterview.answers[index]?.analysis && (
+                            <Box sx={{ mt: 2 }}>
+                              <Typography variant="subtitle2" color="primary">
+                                Feedback:
+                              </Typography>
+                              <Typography variant="body2" paragraph>
+                                {selectedInterview.answers[index].analysis?.feedback || 'No feedback available'}
+                              </Typography>
                               
-                              {/* Transcription */}
-                              {selectedInterview.answers[index]?.transcription && (
-                                <Box sx={{ mt: 2 }}>
-                                  <Typography variant="subtitle2" gutterBottom>
-                                    Transcription:
-                                  </Typography>
-                                  <Paper 
-                                    variant="outlined" 
-                                    sx={{ 
-                                      p: 2, 
-                                      bgcolor: 'grey.50',
-                                      maxHeight: '200px',
-                                      overflow: 'auto'
-                                    }}
-                                  >
-                                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                                      {selectedInterview.answers[index].transcription}
-                                    </Typography>
-                                  </Paper>
-                                </Box>
-                              )}
+                              <Typography variant="subtitle2" color="primary">
+                                Strong Points:
+                              </Typography>
+                              <List>
+                                {(selectedInterview.answers[index].analysis?.strongPoints || []).map((point: string, i: number) => (
+                                  <ListItem key={i}>
+                                    <ListItemText primary={point} />
+                                  </ListItem>
+                                ))}
+                              </List>
+
+                              <Typography variant="subtitle2" color="primary">
+                                Areas for Improvement:
+                              </Typography>
+                              <List>
+                                {(selectedInterview.answers[index].analysis?.areasForImprovement || []).map((area: string, i: number) => (
+                                  <ListItem key={i}>
+                                    <ListItemText primary={area} />
+                                  </ListItem>
+                                ))}
+                              </List>
+
+                              <Typography variant="subtitle2" color="primary">
+                                Technical Accuracy:
+                              </Typography>
+                              <Typography variant="body2" paragraph>
+                                {selectedInterview.answers[index].analysis?.technicalAccuracy || 'No technical accuracy analysis available'}
+                              </Typography>
+
+                              <Typography variant="subtitle2" color="primary">
+                                Communication Style:
+                              </Typography>
+                              <Typography variant="body2" paragraph>
+                                {selectedInterview.answers[index].analysis?.communicationStyle || 'No communication style analysis available'}
+                              </Typography>
+
+                              <Typography variant="subtitle2" color="primary">
+                                Action Items:
+                              </Typography>
+                              <List>
+                                {(selectedInterview.answers[index].analysis?.actionItems || []).map((item: string, i: number) => (
+                                  <ListItem key={i}>
+                                    <ListItemText primary={item} />
+                                  </ListItem>
+                                ))}
+                              </List>
                             </Box>
-                          )}
-
-                          {/* Feedback */}
-                          {selectedInterview.answers[index]?.feedback && (
-                            <Card variant="outlined" sx={{ mt: 2, bgcolor: 'grey.50' }}>
-                              <CardContent>
-                                <Typography variant="subtitle2" gutterBottom>
-                                  Analysis:
-                                </Typography>
-                                
-                                <Typography variant="body2" sx={{ mt: 1 }}>
-                                  Positive Points:
-                                </Typography>
-                                <ul style={{ margin: '0.5rem 0' }}>
-                                  {selectedInterview.answers[index].feedback!.comments.map((comment, i) => (
-                                    <li key={i}>
-                                      <Typography variant="body2">{comment}</Typography>
-                                    </li>
-                                  ))}
-                                </ul>
-
-                                <Typography variant="body2" sx={{ mt: 1 }}>
-                                  Suggestions:
-                                </Typography>
-                                <ul style={{ margin: '0.5rem 0' }}>
-                                  {selectedInterview.answers[index].feedback!.suggestions.map((suggestion, i) => (
-                                    <li key={i}>
-                                      <Typography variant="body2">{suggestion}</Typography>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </CardContent>
-                            </Card>
                           )}
                         </Box>
                       }
                     />
                   </ListItem>
-                  {index < selectedInterview.questions.length - 1 && <Divider />}
+                  <Divider />
                 </React.Fragment>
               ))}
             </List>
