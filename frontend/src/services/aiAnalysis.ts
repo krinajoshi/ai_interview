@@ -44,38 +44,47 @@ async function retry<T>(fn: () => Promise<T>, retries = MAX_RETRIES, delay = RET
 
 const analyzeSentiment = async (text: string) => {
   try {
-    const response = await fetch('https://api.cohere.ai/v1/classify', {
+    const response = await fetch('https://api.cohere.ai/v1/generate', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.REACT_APP_COHERE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'large',
-        inputs: [text],
-        examples: [
-          { text: 'This is great!', label: 'POSITIVE' },
-          { text: 'This is terrible.', label: 'NEGATIVE' },
-          { text: 'This is okay.', label: 'NEUTRAL' }
-        ]
+        model: 'command',
+        prompt: `Analyze the sentiment of this text and respond with only one word: POSITIVE, NEGATIVE, or NEUTRAL.
+
+Text: ${text}`,
+        max_tokens: 10,
+        temperature: 0.3,
+        k: 0,
+        stop_sequences: [],
+        return_likelihoods: 'NONE'
       })
     });
 
     if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Sentiment analysis error:', errorData);
       throw new Error('Sentiment analysis failed');
     }
 
     const data = await response.json();
-    const classification = data.classifications[0];
+    const sentiment = data.generations[0].text.trim().toUpperCase();
+    
+    // Map the sentiment to our expected format
+    const label = sentiment.includes('POSITIVE') ? 'POSITIVE' : 
+                 sentiment.includes('NEGATIVE') ? 'NEGATIVE' : 'NEUTRAL';
     
     return {
       sentiment: {
-        label: classification.prediction,
-        score: classification.confidence
+        label,
+        score: label === 'POSITIVE' ? 0.8 : label === 'NEGATIVE' ? 0.2 : 0.5
       }
     };
   } catch (error) {
     console.error('Error in sentiment analysis:', error);
+    // Return neutral sentiment as fallback
     return {
       sentiment: {
         label: 'NEUTRAL',
@@ -200,178 +209,91 @@ export const transcribeMedia = async (mediaUrl: string, mediaType: "audio" | "vi
   }
 };
 
+const COHERE_API_URL = 'https://api.cohere.ai/v1/generate';
+
 export const analyzeAnswer = async (
   answer: string,
   mediaUrl?: string,
-  mediaType?: string,
+  mediaType?: 'audio' | 'video',
   question?: string
 ): Promise<AIAnalysisResult> => {
   try {
-    console.log('Starting analysis with:', {
-      answer,
-      mediaUrl,
-      mediaType,
-      question,
-      hasCohereKey: !!process.env.REACT_APP_COHERE_API_KEY
-    });
+    // If there's media, transcribe it first
+    let textToAnalyze = answer;
+    if (mediaUrl && mediaType) {
+      const transcription = await transcribeMedia(mediaUrl, mediaType);
+      if (transcription) {
+        textToAnalyze = transcription;
+      }
+    }
 
     // Get sentiment analysis
-    const sentimentResult = await analyzeSentiment(answer);
-    console.log('Sentiment analysis result:', sentimentResult);
-    
-    // Prepare the prompt for Cohere AI
-    const prompt = `As an expert technical interviewer, analyze the following interview answer. Provide a detailed analysis with specific feedback.
+    const sentiment = await analyzeSentiment(textToAnalyze);
+
+    // Prepare the prompt for Cohere
+    const prompt = `Analyze the following interview answer and provide a comprehensive analysis. Focus on the quality of the answer, clarity, and relevance to the question.
 
 Question: ${question || 'Not provided'}
-Answer: ${answer}
+Answer: ${textToAnalyze}
 
-Please provide a comprehensive analysis in the following format:
+Please provide your analysis in the following format:
 
-OVERALL SCORE: [Score out of 5]
-FEEDBACK: [Detailed feedback about the answer]
-STRONG POINTS:
-- [Point 1]
-- [Point 2]
-- [Point 3]
-AREAS FOR IMPROVEMENT:
-- [Point 1]
-- [Point 2]
-- [Point 3]
-STRUCTURE ANALYSIS: [Analysis of answer structure]
-TECHNICAL ACCURACY: [Analysis of technical content]
-COMMUNICATION STYLE: [Analysis of communication]
-ACTION ITEMS:
-- [Item 1]
-- [Item 2]
-- [Item 3]`;
+Overall Score: [score]/5
+Feedback: [detailed feedback about the answer]
 
-    console.log('Sending request to Cohere API with prompt:', prompt);
+The score should be a number between 1 and 5, where:
+1 = Poor
+2 = Below Average
+3 = Average
+4 = Good
+5 = Excellent
 
-    // Call Cohere AI API
-    const response = await fetch('https://api.cohere.ai/v1/generate', {
+The feedback should be detailed and constructive, focusing on:
+- Clarity of the answer
+- Relevance to the question
+- Depth of explanation
+- Use of examples or evidence
+- Overall effectiveness`;
+
+    const response = await fetch(COHERE_API_URL, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.REACT_APP_COHERE_API_KEY}`,
+        'Authorization': `Bearer ${COHERE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         model: 'command',
-        prompt: prompt,
+        prompt,
         max_tokens: 1000,
         temperature: 0.7,
         k: 0,
-        stop_sequences: ["\n\n"],
+        stop_sequences: [],
         return_likelihoods: 'NONE'
       })
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Cohere API error:', {
-        status: response.status,
-        statusText: response.statusText,
-        error: errorText
-      });
-      throw new Error(`Cohere API error: ${errorText}`);
+      throw new Error('Failed to analyze answer');
     }
 
     const data = await response.json();
-    console.log('Cohere API response:', data);
+    const analysisText = data.generations[0].text;
 
-    // Parse the response into sections
-    const sections = data.generations[0].text.split('\n\n');
-    console.log('Parsed sections:', sections);
-
-    const sectionMap = new Map<string, string[]>();
-
-    let currentSection = '';
-    let currentContent: string[] = [];
-
-    sections.forEach((section: string) => {
-      const lines = section.split('\n');
-      const firstLine = lines[0].trim();
-      
-      if (firstLine.includes(':')) {
-        if (currentSection && currentContent.length > 0) {
-          sectionMap.set(currentSection, currentContent);
-        }
-        currentSection = firstLine.split(':')[0].trim();
-        currentContent = lines.slice(1).map((line: string) => line.trim()).filter((line: string) => line);
-      } else {
-        currentContent.push(...lines.map((line: string) => line.trim()).filter((line: string) => line));
-      }
-    });
-
-    if (currentSection && currentContent.length > 0) {
-      sectionMap.set(currentSection, currentContent);
-    }
-
-    console.log('Section map:', Object.fromEntries(sectionMap));
-
-    // Extract score from the overall score section
-    const scoreMatch = sectionMap.get('OVERALL SCORE')?.[0]?.match(/(\d+)/);
+    // Extract score and feedback
+    const scoreMatch = analysisText.match(/Overall Score: (\d+)/);
     const score = scoreMatch ? parseInt(scoreMatch[1]) : 3;
+    const feedbackMatch = analysisText.match(/Feedback: ([\s\S]*?)(?=\n|$)/);
+    const feedback = feedbackMatch ? feedbackMatch[1].trim() : 'No feedback available';
 
-    // Generate fallback content if sections are empty
-    const generateFallbackContent = () => {
-      const wordCount = answer.split(/\s+/).length;
-      const hasExamples = answer.toLowerCase().includes('example') || answer.toLowerCase().includes('instance');
-      const hasTechnicalTerms = answer.match(/\b(algorithm|function|method|class|interface|variable|loop|condition|database|api|framework|library)\b/i);
-      
-      return {
-        feedback: wordCount < 50 
-          ? 'Your answer is quite brief. Consider providing more details and examples to strengthen your response.'
-          : 'Your answer provides a good overview. Consider adding specific examples and technical details where appropriate.',
-        strong_points: hasExamples 
-          ? ['Good use of examples to illustrate points']
-          : ['Clear and concise communication'],
-        improvement_points: !hasExamples 
-          ? ['Add specific examples to support your points']
-          : ['Consider adding more technical details'],
-        structure_analysis: 'Your answer could benefit from a clearer structure with introduction, main points, and conclusion.',
-        technical_accuracy: hasTechnicalTerms 
-          ? 'You effectively use technical terminology.'
-          : 'Consider incorporating more technical terms where appropriate.',
-        communication_style: 'Your communication is clear but could be more professional in tone.',
-        action_items: [
-          'Practice providing specific examples in your answers',
-          'Work on structuring your responses with clear sections',
-          'Incorporate more technical terminology where relevant'
-        ]
-      };
-    };
-
-    // Create the analysis result with fallback content if needed
-    const fallbackContent = generateFallbackContent();
-    const analysisResult: AIAnalysisResult = {
+    return {
       score,
-      feedback: sectionMap.get('FEEDBACK')?.[0] || fallbackContent.feedback,
-      strong_points: sectionMap.get('STRONG POINTS')?.length ? sectionMap.get('STRONG POINTS')! : fallbackContent.strong_points,
-      improvement_points: sectionMap.get('AREAS FOR IMPROVEMENT')?.length ? sectionMap.get('AREAS FOR IMPROVEMENT')! : fallbackContent.improvement_points,
-      structure_analysis: sectionMap.get('STRUCTURE ANALYSIS')?.[0] || fallbackContent.structure_analysis,
-      technical_accuracy: sectionMap.get('TECHNICAL ACCURACY')?.[0] || fallbackContent.technical_accuracy,
-      communication_style: sectionMap.get('COMMUNICATION STYLE')?.[0] || fallbackContent.communication_style,
-      action_items: sectionMap.get('ACTION ITEMS')?.length ? sectionMap.get('ACTION ITEMS')! : fallbackContent.action_items,
-      sentiment: sentimentResult.sentiment,
-      transcription: answer
+      feedback
     };
-
-    console.log('Final analysis result:', analysisResult);
-    return analysisResult;
   } catch (error) {
-    console.error('Error in analyzeAnswer:', error);
-    // Return a default analysis result in case of error
+    console.error('Error analyzing answer:', error);
     return {
       score: 3,
-      feedback: 'Unable to analyze the answer. Please try again.',
-      strong_points: ['Analysis temporarily unavailable'],
-      improvement_points: ['Please try again later'],
-      structure_analysis: 'Analysis temporarily unavailable',
-      technical_accuracy: 'Analysis temporarily unavailable',
-      communication_style: 'Analysis temporarily unavailable',
-      action_items: ['Please try again later'],
-      sentiment: { label: 'NEUTRAL', score: 0.5 },
-      transcription: answer
+      feedback: 'An error occurred while analyzing the answer. Please try again.'
     };
   }
 };
@@ -381,10 +303,8 @@ const parseAnalysisResponse = (response: string) => {
   const sections: any = {
     score: 0,
     feedback: '',
-    comments: [],
-    suggestions: [],
-    improvement_points: [],
     strong_points: [],
+    improvement_points: [],
     structure_analysis: '',
     technical_accuracy: '',
     communication_style: '',
@@ -392,79 +312,72 @@ const parseAnalysisResponse = (response: string) => {
   };
 
   try {
-    // Split response into sections
+    // Split response into lines
     const lines = response.split('\n');
     let currentSection = '';
     let currentContent: string[] = [];
 
     for (const line of lines) {
-      // Check for numbered sections (1., 2., etc.)
-      const sectionMatch = line.match(/^(\d+)\.\s*(.*)/);
-      if (sectionMatch) {
+      const trimmedLine = line.trim();
+      
+      // Check for section headers
+      if (trimmedLine.match(/^(OVERALL SCORE|FEEDBACK|STRONG POINTS|AREAS FOR IMPROVEMENT|TECHNICAL ACCURACY|COMMUNICATION STYLE|ACTION ITEMS):$/i)) {
         // Save previous section if exists
         if (currentSection && currentContent.length > 0) {
-          sections[currentSection] = currentContent.join('\n');
-          currentContent = [];
+          if (currentSection === 'overall_score') {
+            const scoreMatch = currentContent[0].match(/(\d+)/);
+            sections.score = scoreMatch ? parseInt(scoreMatch[1]) : 3;
+          } else if (currentSection === 'strong_points' || currentSection === 'improvement_points' || currentSection === 'action_items') {
+            sections[currentSection] = currentContent
+              .filter(item => item.startsWith('-') || item.startsWith('*'))
+              .map(item => item.replace(/^[-*]\s*/, ''));
+          } else {
+            sections[currentSection] = currentContent.join(' ');
+          }
         }
 
         // Start new section
-        const sectionNumber = parseInt(sectionMatch[1]);
-        const sectionTitle = sectionMatch[2].toLowerCase().trim();
-        
-        // Map section numbers to section names
-        switch (sectionNumber) {
-          case 1:
-            currentSection = 'overall_score';
-            break;
-          case 2:
-            currentSection = 'strong_points';
-            break;
-          case 3:
-            currentSection = 'improvement_points';
-            break;
-          case 4:
-            currentSection = 'structure_analysis';
-            break;
-          case 5:
-            currentSection = 'technical_accuracy';
-            break;
-          case 6:
-            currentSection = 'communication_style';
-            break;
-          case 7:
-            currentSection = 'action_items';
-            break;
-          default:
-            currentSection = '';
-        }
-      } else if (line.trim() && currentSection) {
-        // Skip bullet points and dashes
-        const cleanLine = line.trim().replace(/^[-•*]\s*/, '');
-        if (cleanLine) {
-          currentContent.push(cleanLine);
-        }
+        currentSection = trimmedLine.toLowerCase().replace(':', '').replace(/\s+/g, '_');
+        currentContent = [];
+      } else if (trimmedLine && currentSection) {
+        currentContent.push(trimmedLine);
       }
     }
 
     // Save last section
     if (currentSection && currentContent.length > 0) {
-      sections[currentSection] = currentContent.join('\n');
+      if (currentSection === 'overall_score') {
+        const scoreMatch = currentContent[0].match(/(\d+)/);
+        sections.score = scoreMatch ? parseInt(scoreMatch[1]) : 3;
+      } else if (currentSection === 'strong_points' || currentSection === 'improvement_points' || currentSection === 'action_items') {
+        sections[currentSection] = currentContent
+          .filter(item => item.startsWith('-') || item.startsWith('*'))
+          .map(item => item.replace(/^[-*]\s*/, ''));
+      } else {
+        sections[currentSection] = currentContent.join(' ');
+      }
     }
 
-    // Extract score from overall_score section
-    const scoreMatch = sections.overall_score?.match(/score:\s*(\d+)/i);
-    if (scoreMatch) {
-      sections.score = parseInt(scoreMatch[1]);
+    // Ensure all sections have content
+    if (!sections.strong_points.length) {
+      sections.strong_points = ['Clear communication', 'Good structure'];
     }
-
-    // Convert sections to arrays where appropriate
-    sections.strong_points = sections.strong_points?.split('\n').filter(Boolean) || [];
-    sections.improvement_points = sections.improvement_points?.split('\n').filter(Boolean) || [];
-    sections.action_items = sections.action_items?.split('\n').filter(Boolean) || [];
-    sections.suggestions = sections.improvement_points || [];
-
-    // Set feedback as the overall analysis
-    sections.feedback = sections.overall_score || '';
+    if (!sections.improvement_points.length) {
+      sections.improvement_points = ['Add more technical details', 'Include specific examples'];
+    }
+    if (!sections.technical_accuracy) {
+      sections.technical_accuracy = 'The answer demonstrates basic technical understanding but could benefit from more specific technical details and examples.';
+    }
+    if (!sections.communication_style) {
+      sections.communication_style = 'The communication is clear but could be more technical and detailed.';
+    }
+    if (!sections.action_items.length) {
+      sections.action_items = [
+        'Practice including more technical terminology',
+        'Add specific examples to support your points',
+        'Work on structuring your responses with clear sections'
+      ];
+    }
 
     // Log the parsed sections for debugging
     console.log('Parsed sections:', sections);
@@ -476,131 +389,172 @@ const parseAnalysisResponse = (response: string) => {
   return sections;
 };
 
-// Helper functions to generate unique feedback based on the answer content
+// Helper functions for generating unique analysis content
 const generateUniqueFeedback = (answer: string, question?: string): string => {
   const wordCount = answer.split(/\s+/).length;
   const hasExamples = answer.toLowerCase().includes('example') || answer.toLowerCase().includes('instance');
   const hasTechnicalTerms = answer.match(/\b(algorithm|function|method|class|interface|variable|loop|condition|database|api|framework|library)\b/i);
   
-  let feedback = '';
-  
   if (wordCount < 50) {
-    feedback += 'Your answer is quite brief. ';
-  } else if (wordCount < 100) {
-    feedback += 'Your answer provides a good overview. ';
+    return 'Your answer is quite brief. Consider providing more details and examples to strengthen your response.';
+  } else if (!hasExamples) {
+    return 'Your answer provides a good overview but could be strengthened with specific examples and real-world scenarios.';
+  } else if (!hasTechnicalTerms) {
+    return 'Your answer is well-structured but could benefit from more technical terminology and specific implementation details.';
   } else {
-    feedback += 'Your answer is detailed and comprehensive. ';
+    return 'Your answer demonstrates strong technical knowledge and effective communication. Consider adding more specific implementation details or edge cases.';
   }
-  
-  if (hasExamples) {
-    feedback += 'Good use of examples to illustrate your points. ';
-  } else {
-    feedback += 'Consider adding specific examples to strengthen your response. ';
-  }
-  
-  if (hasTechnicalTerms) {
-    feedback += 'You effectively use technical terminology. ';
-  } else {
-    feedback += 'Try incorporating more technical terms where appropriate. ';
-  }
-  
-  return feedback.trim();
-};
-
-const generateUniqueSuggestions = (answer: string): string[] => {
-  const suggestions: string[] = [];
-  const wordCount = answer.split(/\s+/).length;
-  const hasStructure = answer.match(/\b(first|second|finally|in conclusion|to summarize)\b/i);
-  
-  if (wordCount < 50) {
-    suggestions.push('Expand your answer with more details and examples');
-  }
-  
-  if (!hasStructure) {
-    suggestions.push('Structure your response with clear sections: introduction, main points, and conclusion');
-  }
-  
-  if (!answer.match(/\b(because|therefore|thus|hence|consequently)\b/i)) {
-    suggestions.push('Add logical connections between your ideas using transition words');
-  }
-  
-  return suggestions;
 };
 
 const generateUniqueStrongPoints = (answer: string): string[] => {
   const strongPoints: string[] = [];
   
-  if (answer.match(/\b(example|instance|case|scenario)\b/i)) {
-    strongPoints.push('Effective use of examples to illustrate points');
-  }
-  
-  if (answer.match(/\b(because|therefore|thus|hence|consequently)\b/i)) {
-    strongPoints.push('Good logical flow and reasoning');
+  if (answer.toLowerCase().includes('example') || answer.toLowerCase().includes('instance')) {
+    strongPoints.push('Good use of examples to illustrate points');
   }
   
   if (answer.match(/\b(algorithm|function|method|class|interface|variable|loop|condition|database|api|framework|library)\b/i)) {
-    strongPoints.push('Strong technical vocabulary usage');
+    strongPoints.push('Effective use of technical terminology');
+  }
+  
+  if (answer.includes('```') || answer.includes('code')) {
+    strongPoints.push('Inclusion of code examples demonstrates practical knowledge');
+  }
+  
+  if (answer.toLowerCase().includes('first') || answer.toLowerCase().includes('second') || answer.toLowerCase().includes('finally')) {
+    strongPoints.push('Well-structured response with clear organization');
+  }
+  
+  if (strongPoints.length === 0) {
+    strongPoints.push('Clear and concise communication');
   }
   
   return strongPoints;
 };
 
-const generateUniqueStructureAnalysis = (answer: string): string => {
-  const hasStructure = answer.match(/\b(first|second|finally|in conclusion|to summarize)\b/i);
-  const hasTransitions = answer.match(/\b(because|therefore|thus|hence|consequently)\b/i);
+const generateUniqueSuggestions = (answer: string): string[] => {
+  const suggestions: string[] = [];
   
-  if (hasStructure && hasTransitions) {
-    return 'Your answer is well-structured with clear sections and smooth transitions between ideas.';
+  if (!answer.toLowerCase().includes('example') && !answer.toLowerCase().includes('instance')) {
+    suggestions.push('Add specific examples to support your points');
+  }
+  
+  if (!answer.match(/\b(algorithm|function|method|class|interface|variable|loop|condition|database|api|framework|library)\b/i)) {
+    suggestions.push('Incorporate more technical terminology where appropriate');
+  }
+  
+  if (!answer.includes('```') && !answer.includes('code')) {
+    suggestions.push('Consider including code snippets to demonstrate implementation');
+  }
+  
+  if (!answer.toLowerCase().includes('first') && !answer.toLowerCase().includes('second') && !answer.toLowerCase().includes('finally')) {
+    suggestions.push('Structure your response with clear sections (introduction, main points, conclusion)');
+  }
+  
+  if (suggestions.length === 0) {
+    suggestions.push('Consider adding more specific implementation details');
+    suggestions.push('Include edge cases and potential challenges');
+  }
+  
+  return suggestions;
+};
+
+const generateUniqueStructureAnalysis = (answer: string): string => {
+  const hasStructure = answer.toLowerCase().includes('first') || answer.toLowerCase().includes('second') || answer.toLowerCase().includes('finally');
+  const hasExamples = answer.toLowerCase().includes('example') || answer.toLowerCase().includes('instance');
+  
+  if (hasStructure && hasExamples) {
+    return 'Your answer is well-structured with clear organization and supporting examples. The flow is logical and easy to follow.';
   } else if (hasStructure) {
-    return 'Your answer has a good structure but could benefit from better transitions between ideas.';
-  } else if (hasTransitions) {
-    return 'Your answer flows well but could be better organized with clear sections.';
+    return 'Your answer has a good structure but could benefit from more specific examples to support each point.';
+  } else if (hasExamples) {
+    return 'Your answer includes good examples but could be better organized with clear sections and transitions.';
   } else {
-    return 'Consider organizing your answer into clear sections with proper transitions.';
+    return 'Consider organizing your response with clear sections (introduction, main points, conclusion) and supporting examples.';
   }
 };
 
 const generateUniqueTechnicalAnalysis = (answer: string): string => {
-  const technicalTerms = answer.match(/\b(algorithm|function|method|class|interface|variable|loop|condition|database|api|framework|library)\b/gi);
+  const hasTechnicalTerms = answer.match(/\b(algorithm|function|method|class|interface|variable|loop|condition|database|api|framework|library)\b/i);
+  const hasCodeSnippets = answer.includes('```') || answer.includes('code');
   
-  if (technicalTerms && technicalTerms.length > 3) {
-    return 'Your answer demonstrates strong technical knowledge with appropriate use of technical terminology.';
-  } else if (technicalTerms && technicalTerms.length > 0) {
-    return 'Your answer includes some technical terms but could benefit from more technical depth.';
+  if (hasTechnicalTerms && hasCodeSnippets) {
+    return 'Your answer demonstrates strong technical knowledge with appropriate terminology and practical code examples.';
+  } else if (hasTechnicalTerms) {
+    return 'You effectively use technical terminology but could strengthen your response with code examples or implementation details.';
+  } else if (hasCodeSnippets) {
+    return 'Your code examples are helpful, but consider incorporating more technical terminology to better explain the concepts.';
   } else {
-    return 'Consider incorporating more technical terminology to demonstrate your expertise.';
+    return 'Consider adding more technical details, including specific terminology and implementation examples.';
   }
 };
 
 const generateUniqueCommunicationAnalysis = (answer: string): string => {
-  const hasProfessionalTone = answer.match(/\b(professional|efficient|effective|optimal|robust|scalable)\b/i);
-  const hasClarity = answer.match(/\b(clear|simple|straightforward|understandable)\b/i);
+  const wordCount = answer.split(/\s+/).length;
+  const hasStructure = answer.toLowerCase().includes('first') || answer.toLowerCase().includes('second') || answer.toLowerCase().includes('finally');
   
-  if (hasProfessionalTone && hasClarity) {
-    return 'Your communication style is professional and clear.';
-  } else if (hasProfessionalTone) {
-    return 'Your tone is professional but could be clearer in explaining concepts.';
-  } else if (hasClarity) {
-    return 'Your explanation is clear but could be more professional in tone.';
+  if (wordCount > 100 && hasStructure) {
+    return 'Your communication is clear, professional, and well-structured. You effectively convey complex technical concepts.';
+  } else if (wordCount > 100) {
+    return 'Your communication is detailed but could benefit from better organization to improve clarity.';
+  } else if (hasStructure) {
+    return 'Your communication is well-structured but could be more detailed to fully explain the concepts.';
   } else {
-    return 'Consider improving both the clarity and professionalism of your communication.';
+    return 'Consider providing more detailed explanations and organizing your response for better clarity.';
   }
 };
 
 const generateUniqueActionItems = (answer: string): string[] => {
   const actionItems: string[] = [];
   
-  if (!answer.match(/\b(example|instance|case|scenario)\b/i)) {
+  if (!answer.toLowerCase().includes('example') && !answer.toLowerCase().includes('instance')) {
     actionItems.push('Practice providing specific examples in your answers');
   }
   
   if (!answer.match(/\b(algorithm|function|method|class|interface|variable|loop|condition|database|api|framework|library)\b/i)) {
-    actionItems.push('Study and incorporate more technical terminology');
+    actionItems.push('Expand your technical vocabulary and use appropriate terminology');
   }
   
-  if (!answer.match(/\b(because|therefore|thus|hence|consequently)\b/i)) {
-    actionItems.push('Work on using transition words to improve answer flow');
+  if (!answer.includes('```') && !answer.includes('code')) {
+    actionItems.push('Include code snippets to demonstrate practical implementation');
+  }
+  
+  if (!answer.toLowerCase().includes('first') && !answer.toLowerCase().includes('second') && !answer.toLowerCase().includes('finally')) {
+    actionItems.push('Work on structuring your responses with clear sections');
+  }
+  
+  if (actionItems.length === 0) {
+    actionItems.push('Consider adding more specific implementation details');
+    actionItems.push('Include edge cases and potential challenges');
+    actionItems.push('Practice explaining complex technical concepts clearly');
   }
   
   return actionItems;
+};
+
+// Test function to demonstrate dynamic analysis
+export const testAnalysis = async (): Promise<AIAnalysisResult> => {
+  const sampleAnswer = `When implementing a binary search algorithm, I first check if the array is sorted. Then, I use a while loop to repeatedly divide the array in half. For example, if we have an array [1, 3, 5, 7, 9] and we're searching for 5, we first check the middle element. Since 5 is greater than 3, we search the right half. Finally, we find 5 in the middle of the remaining elements.
+
+Here's a code example:
+\`\`\`python
+def binary_search(arr, target):
+    left, right = 0, len(arr) - 1
+    while left <= right:
+        mid = (left + right) // 2
+        if arr[mid] == target:
+            return mid
+        elif arr[mid] < target:
+            left = mid + 1
+        else:
+            right = mid - 1
+    return -1
+\`\`\`
+
+This implementation has O(log n) time complexity and is very efficient for large datasets.`;
+
+  console.log('Testing analysis with sample answer:', sampleAnswer);
+  const result = await analyzeAnswer(sampleAnswer, undefined, undefined, 'Explain how you would implement a binary search algorithm.');
+  console.log('Analysis result:', result);
+  return result;
 }; 

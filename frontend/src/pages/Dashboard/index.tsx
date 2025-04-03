@@ -27,6 +27,7 @@ import PlayCircleIcon from '@mui/icons-material/PlayCircle';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import MicIcon from '@mui/icons-material/Mic';
 import AssessmentIcon from '@mui/icons-material/Assessment';
+import TestAnalysis from '../../components/TestAnalysis';
 
 interface Interview {
   jobTitle: string;
@@ -145,6 +146,14 @@ const Dashboard: React.FC = () => {
           ))}
         </Grid>
 
+        {/* Add Test Analysis section */}
+        <Paper sx={{ p: 3, mb: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Test Analysis
+          </Typography>
+          <TestAnalysis />
+        </Paper>
+
         <Dialog
           open={!!selectedInterview}
           onClose={handleCloseDialog}
@@ -185,6 +194,18 @@ const Dashboard: React.FC = () => {
                           <Typography variant="body2" color="text.secondary">
                             Answer: {selectedInterview.answers[index]?.text || selectedInterview.answers[index]?.transcription || 'No answer provided'}
                           </Typography>
+                          {selectedInterview.answers[index]?.mediaUrl && (
+                            <Box sx={{ mt: 1 }}>
+                              <Typography variant="body2" color="text.secondary">
+                                {selectedInterview.answers[index]?.mediaType === 'audio' ? 'Audio Answer:' : 'Video Answer:'}
+                              </Typography>
+                              {selectedInterview.answers[index]?.mediaType === 'audio' ? (
+                                <audio controls src={selectedInterview.answers[index]?.mediaUrl} style={{ width: '100%', marginTop: '8px' }} />
+                              ) : (
+                                <video controls src={selectedInterview.answers[index]?.mediaUrl} style={{ width: '100%', marginTop: '8px' }} />
+                              )}
+                            </Box>
+                          )}
                           {selectedInterview.answers[index]?.analysis && (
                             <Box sx={{ mt: 2 }}>
                               <Typography variant="subtitle2" color="primary">
@@ -193,53 +214,6 @@ const Dashboard: React.FC = () => {
                               <Typography variant="body2" paragraph>
                                 {selectedInterview.answers[index].analysis?.feedback || 'No feedback available'}
                               </Typography>
-                              
-                              <Typography variant="subtitle2" color="primary">
-                                Strong Points:
-                              </Typography>
-                              <List>
-                                {(selectedInterview.answers[index].analysis?.strongPoints || []).map((point: string, i: number) => (
-                                  <ListItem key={i}>
-                                    <ListItemText primary={point} />
-                                  </ListItem>
-                                ))}
-                              </List>
-
-                              <Typography variant="subtitle2" color="primary">
-                                Areas for Improvement:
-                              </Typography>
-                              <List>
-                                {(selectedInterview.answers[index].analysis?.areasForImprovement || []).map((area: string, i: number) => (
-                                  <ListItem key={i}>
-                                    <ListItemText primary={area} />
-                                  </ListItem>
-                                ))}
-                              </List>
-
-                              <Typography variant="subtitle2" color="primary">
-                                Technical Accuracy:
-                              </Typography>
-                              <Typography variant="body2" paragraph>
-                                {selectedInterview.answers[index].analysis?.technicalAccuracy || 'No technical accuracy analysis available'}
-                              </Typography>
-
-                              <Typography variant="subtitle2" color="primary">
-                                Communication Style:
-                              </Typography>
-                              <Typography variant="body2" paragraph>
-                                {selectedInterview.answers[index].analysis?.communicationStyle || 'No communication style analysis available'}
-                              </Typography>
-
-                              <Typography variant="subtitle2" color="primary">
-                                Action Items:
-                              </Typography>
-                              <List>
-                                {(selectedInterview.answers[index].analysis?.actionItems || []).map((item: string, i: number) => (
-                                  <ListItem key={i}>
-                                    <ListItemText primary={item} />
-                                  </ListItem>
-                                ))}
-                              </List>
                             </Box>
                           )}
                         </Box>
