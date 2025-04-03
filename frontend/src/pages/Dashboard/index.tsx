@@ -27,7 +27,6 @@ import PlayCircleIcon from '@mui/icons-material/PlayCircle';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import MicIcon from '@mui/icons-material/Mic';
 import AssessmentIcon from '@mui/icons-material/Assessment';
-import TestAnalysis from '../../components/TestAnalysis';
 
 interface Interview {
   jobTitle: string;
@@ -145,14 +144,6 @@ const Dashboard: React.FC = () => {
             </Grid>
           ))}
         </Grid>
-
-        {/* Add Test Analysis section */}
-        <Paper sx={{ p: 3, mb: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Test Analysis
-          </Typography>
-          <TestAnalysis />
-        </Paper>
 
         <Dialog
           open={!!selectedInterview}
