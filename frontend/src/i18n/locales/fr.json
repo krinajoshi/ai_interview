@@ -1,0 +1,10 @@
+{
+  "setup": {
+    "jobTitle": "Titre du poste",
+    "jobDescription": "Description du poste",
+    "jobDescriptionHelp": "Pour des questions d'entretien plus pertinentes, veuillez fournir la description du poste. Si non disponible, nous générerons des questions basées sur le titre du poste.",
+    "resume": "Télécharger le CV",
+    "startInterview": "Commencer l'entretien",
+    "backToDashboard": "Retour au tableau de bord"
+  }
+} 

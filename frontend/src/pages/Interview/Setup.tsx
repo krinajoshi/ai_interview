@@ -22,6 +22,7 @@ import {
   setError,
 } from '../../features/interview/interviewSlice';
 import LanguageSelector from '../../components/LanguageSelector';
+import { useTranslation } from 'react-i18next';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -33,6 +34,7 @@ const InterviewSetup: React.FC<InterviewSetupProps> = ({ onStart }) => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { loading, error, selectedLanguage } = useAppSelector((state) => state.interview);
+  const { t } = useTranslation();
 
   const [jobTitleInput, setJobTitleInput] = useState('');
   const [resumeFile, setResumeFile] = useState<File | null>(null);
@@ -86,17 +88,24 @@ const InterviewSetup: React.FC<InterviewSetupProps> = ({ onStart }) => {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
         },
         body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to generate interview questions');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('API Error:', errorData);
+        throw new Error(errorData.detail || 'Failed to generate interview questions');
       }
 
       const data = await response.json();
       console.log("Response data:", data);
-      console.log("Questions data:", data.questions);
+      
+      if (!data.questions) {
+        console.error("No questions in response:", data);
+        throw new Error('No questions received from server');
+      }
       
       // Save the resume file name if returned
       if (data.resumeFileName) {
@@ -132,6 +141,7 @@ const InterviewSetup: React.FC<InterviewSetupProps> = ({ onStart }) => {
       // Navigate to the interview page
       navigate('/interview');
     } catch (error) {
+      console.error('Interview setup error:', error);
       dispatch(setError(error instanceof Error ? error.message : 'Failed to start interview'));
     } finally {
       dispatch(setLoading(false));
@@ -185,22 +195,29 @@ const InterviewSetup: React.FC<InterviewSetupProps> = ({ onStart }) => {
             </Typography>
             <TextField
               fullWidth
-              label={
-                selectedLanguage === 'fr' ? 'Titre du poste' :
-                selectedLanguage === 'ar' ? 'المسمى الوظيفي' :
-                'Job Title'
-              }
+              label={t('setup.jobTitle')}
               value={jobTitleInput}
               onChange={(e) => setJobTitleInput(e.target.value)}
+              required
               error={!!error}
               helperText={error}
-              disabled={loading}
               sx={{ mb: 2 }}
-              InputProps={{
-                style: { textAlign: selectedLanguage === 'ar' ? 'right' : 'left' }
-              }}
             />
           </Box>
+
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            {t('setup.jobDescriptionHelp')}
+          </Typography>
+          
+          <TextField
+            fullWidth
+            label={t('setup.jobDescription')}
+            value={jobDescriptionText}
+            onChange={(e) => setJobDescriptionText(e.target.value)}
+            multiline
+            rows={4}
+            sx={{ mb: 2 }}
+          />
 
           <Divider sx={{ my: 3 }} />
 
@@ -242,27 +259,6 @@ const InterviewSetup: React.FC<InterviewSetupProps> = ({ onStart }) => {
                 </Typography>
               )}
             </Box>
-
-            <TextField
-              fullWidth
-              multiline
-              rows={4}
-              label={
-                selectedLanguage === 'fr' ? 'Description du poste' :
-                selectedLanguage === 'ar' ? 'وصف الوظيفة' :
-                'Job Description'
-              }
-              value={jobDescriptionText}
-              onChange={(e) => setJobDescriptionText(e.target.value)}
-              placeholder={
-                selectedLanguage === 'fr' ? 'Collez la description du poste ici...' :
-                selectedLanguage === 'ar' ? '...الصق وصف الوظيفة هنا' :
-                'Paste the job description here...'
-              }
-              InputProps={{
-                style: { textAlign: selectedLanguage === 'ar' ? 'right' : 'left' }
-              }}
-            />
           </Box>
 
           <Button

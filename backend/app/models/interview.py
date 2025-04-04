@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Optional, List, Dict
 from pydantic import BaseModel, Field, ConfigDict
 from .user import PyObjectId
+from bson import ObjectId
 
 class VoiceMetrics(BaseModel):
     confidence: float
@@ -20,13 +21,13 @@ class FacialMetrics(BaseModel):
 class Question(BaseModel):
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     interview_id: PyObjectId
-    text: str
+    text: Dict[str, str]  # Language to text mapping
     type: str  # technical/behavioral
     difficulty: int  # 1-5
     skill_tested: str
     reference_answer: str
     order: int
-    time_limit: Optional[int]  # in seconds
+    time_limit: Optional[int] = None  # in seconds
     code_required: bool = False
     whiteboard_required: bool = False
 
@@ -45,29 +46,28 @@ class Answer(BaseModel):
     whiteboard_submission: Optional[str]  # S3 link to image
 
 class Interview(BaseModel):
-    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
-    user_id: PyObjectId
-    role_id: PyObjectId
+    id: Optional[str] = Field(default_factory=lambda: str(ObjectId()))
+    user_id: str
+    role_id: str
     language: str
-    start_time: datetime = Field(default_factory=datetime.utcnow)
-    end_time: Optional[datetime]
-    status: str  # scheduled, in_progress, completed, paused, abandoned
-    overall_score: Optional[float]
-    technical_score: Optional[float]
-    communication_score: Optional[float]
-    voice_metrics: Optional[VoiceMetrics]
-    facial_metrics: Optional[FacialMetrics]
-    recording_url: Optional[str]  # S3 link
-    feedback_summary: Optional[str]
-    improvement_areas: List[str]
-    questions: List[Question]
-    answers: List[Answer]
+    status: str
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    overall_score: Optional[float] = None
+    technical_score: Optional[float] = None
+    communication_score: Optional[float] = None
+    voice_metrics: Optional[dict] = None
+    facial_metrics: Optional[dict] = None
+    recording_url: Optional[str] = None
+    feedback_summary: Optional[str] = None
+    improvement_areas: Optional[List[str]] = None
+    questions: Optional[List[dict]] = None
+    answers: Optional[List[dict]] = None
 
-    model_config = ConfigDict(
-        populate_by_name=True,
-        arbitrary_types_allowed=True,
-        json_encoders={PyObjectId: str}
-    )
+    class Config:
+        json_encoders = {
+            ObjectId: str
+        }
 
 class InterviewCreate(BaseModel):
     role_id: str
