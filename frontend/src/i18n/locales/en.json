@@ -1,0 +1,10 @@
+{
+  "setup": {
+    "jobTitle": "Job Title",
+    "jobDescription": "Job Description",
+    "jobDescriptionHelp": "For better interview questions, please provide the job description. If not available, we'll generate questions based on the job title.",
+    "resume": "Upload Resume",
+    "startInterview": "Start Interview",
+    "backToDashboard": "Back to Dashboard"
+  }
+} 

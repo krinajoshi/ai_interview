@@ -22,10 +22,10 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["*"],  # Allow all origins in development
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
     expose_headers=["*"],
     max_age=3600,
 )
@@ -41,11 +41,20 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 # Event handlers for MongoDB connection
 @app.on_event("startup")
 async def startup_db_client():
-    await connect_to_mongo()
+    try:
+        await connect_to_mongo()
+        print("Successfully connected to MongoDB")
+    except Exception as e:
+        print(f"Failed to connect to MongoDB: {str(e)}")
+        raise
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    await close_mongo_connection()
+    try:
+        await close_mongo_connection()
+        print("Successfully closed MongoDB connection")
+    except Exception as e:
+        print(f"Error closing MongoDB connection: {str(e)}")
 
 # Health check endpoint
 @app.get("/health")
@@ -87,7 +96,8 @@ async def general_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={
-            "detail": f"An unexpected error occurred: {str(exc)}"
+            "detail": f"An unexpected error occurred: {str(exc)}",
+            "traceback": traceback.format_exc() if settings.DEBUG else None
         }
     )
 
