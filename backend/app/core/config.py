@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     ]
     
     # Database
-    MONGODB_URL: str = "mongodb://localhost:27017"
+    MONGODB_URL: str = "mongodb+srv://developergirls8:T42xnbXGP7nJOqS5@ai-interview-db.yhihgxo.mongodb.net/ai_interview_db"
     MONGODB_DB_NAME: str = "ai_interview_db"
     
     # AWS
