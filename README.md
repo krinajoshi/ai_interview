@@ -13,6 +13,7 @@ An intelligent interview preparation and practice platform that helps users prep
 - **Speech-to-Text**: Automatic transcription of audio/video recordings for analysis
 - **Sentiment Analysis**: Get insights into your communication style and tone
 - **Performance Metrics**: Track your scores and improvement areas
+- **AI-Powered Question Generation**: Generate dynamic interview questions using the Hugging Face API based on job titles and descriptions.
 
 ## Tech Stack
 
@@ -29,6 +30,7 @@ An intelligent interview preparation and practice platform that helps users prep
 - Whisper API for speech-to-text transcription
 - SQLAlchemy for database operations
 - Pydantic for data validation
+- Hugging Face API for question generation
 
 ## Getting Started
 
@@ -50,6 +52,8 @@ Create a `.env` file in the backend directory:
 DATABASE_URL=sqlite:///./interview.db
 COHERE_API_KEY=your_cohere_api_key
 WHISPER_API_KEY=your_whisper_api_key
+HUGGINGFACE_API_TOKEN=your_huggingface_api_token
+HUGGINGFACE_ENDPOINT=https://api-inference.huggingface.co/models/your_model
 ```
 
 ### Installation
@@ -162,6 +166,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Added file size validation
 - Improved error messages
 - Enhanced logging for debugging
+
+### Question Generation Improvements
+- Integrated Hugging Face API for dynamic question generation based on job titles and descriptions.
+- Enhanced error handling and fallback mechanisms to ensure robust question generation.
+- Improved logging for better debugging and tracking of API interactions.
 
 ## Contributing
 1. Fork the repository
