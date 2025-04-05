@@ -38,4 +38,53 @@ dist/
 .vscode/
 *.swp
 *.swo
-.DS_Store 
+.DS_Store
+
+# Credentials and sensitive files
+*.pem
+*.key
+*.cert
+*.crt
+*.env
+*.env.*
+config.json
+secrets.json
+credentials.json
+firebase-credentials.json
+google-credentials.json
+aws-credentials.json
+mongodb-credentials.json
+
+# Logs
+*.log
+logs/
+log/
+
+# Database
+*.sqlite
+*.db
+*.sql
+*.dump
+mongodb_backup/
+
+# Build and deployment
+build/
+dist/
+out/
+.next/
+.nuxt/
+deploy/
+deployment/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.swp
+*.swo
+*~
+
+# System files
+.DS_Store
+Thumbs.db 
