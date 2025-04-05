@@ -74,7 +74,24 @@ const Login: React.FC = () => {
       }
 
       if (data.user && data.token) {
-        dispatch(loginSuccess({ ...data.user, token: data.token }));
+        // Log the user data for debugging
+        console.log('User data from server:', data.user);
+        
+        // Make sure we have all required user fields
+        if (!data.user.name) {
+          console.warn('User name is missing from server response');
+        }
+        
+        dispatch(loginSuccess({ 
+          user: {
+            id: data.user.id,
+            email: data.user.email,
+            name: data.user.name || data.user.email.split('@')[0], // Fallback to email username if name is missing
+            preferred_language: data.user.preferred_language || 'en',
+            subscription_status: data.user.subscription_status || 'free'
+          },
+          token: data.token 
+        }));
         navigate('/dashboard');
       } else {
         throw new Error('Invalid response format from server');
@@ -131,7 +148,7 @@ const Login: React.FC = () => {
             sx={{ mt: 3, mb: 2 }}
             disabled={loading}
           >
-            {loading ? 'Loading...' : t('common.login')}
+            {loading ? t('auth.loading') : t('common.login')}
           </Button>
           <Box sx={{ textAlign: 'center' }}>
             <Link href="#" variant="body2" onClick={() => navigate('/forgot-password')}>

@@ -6,5 +6,29 @@
     "resume": "Upload Resume",
     "startInterview": "Start Interview",
     "backToDashboard": "Back to Dashboard"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "welcome": "Welcome back, {{name}}!",
+    "completedOn": "Completed On",
+    "averageScore": "Average Score",
+    "questionsAnswered": "Questions Answered",
+    "viewResponses": "View Responses",
+    "pastInterviews": "Past Interviews"
+  },
+  "auth": {
+    "email": "Email",
+    "password": "Password",
+    "login": "Login",
+    "forgotPassword": "Forgot Password?",
+    "noAccount": "Don't have an account? Sign up",
+    "loading": "Loading...",
+    "common": {
+      "login": "Login"
+    }
+  },
+  "common": {
+    "login": "Login",
+    "guest": "Guest"
   }
 } 
