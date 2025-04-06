@@ -13,9 +13,21 @@ import docx2txt
 import PyPDF2
 import io
 import bson
+from openai import OpenAI
+from dotenv import load_dotenv
+from bson.objectid import ObjectId
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# Load environment variables
+load_dotenv()
+
+# Initialize OpenAI client with OpenRouter base URL
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPENROUTER_API_KEY")
+)
 
 # Initialize Hugging Face settings
 HUGGINGFACE_API_TOKEN = settings.HUGGINGFACE_API_TOKEN
@@ -159,338 +171,142 @@ async def call_huggingface_with_fallbacks(prompt: str, system_prompt: str = "You
     else:
         raise Exception("All Hugging Face models failed")
 
-async def generate_questions(interview: Interview) -> List[Question]:
-    # Get database connection
-    db = get_database()
-    
-    # Get role details
-    role_dict = await db.roles.find_one({"_id": interview.role_id})
-    if not role_dict:
-        # If role not found, create a temporary role
-        role_dict = {
-            "_id": bson.ObjectId(),  # Generate a valid ObjectId
-            "name": "General Interview",
-            "category": "General",
-            "specialization": "General",
-            "experience_level": "mid-level",
-            "required_skills": [{"name": "general", "level": "intermediate"}],
-            "interview_structure": {"technical": 3, "behavioral": 2},
-            "difficulty_distribution": {
-                "1": 0.1, "2": 0.2, "3": 0.4, "4": 0.2, "5": 0.1
-            }
-        }
-    
-    # Get resume details if available
-    resume_dict = await db.resumes.find_one({"user_id": interview.user_id})
-    if not resume_dict:
-        # Create default resume data
-        resume_dict = {
-            "parsed_data": {
-                "skills": ["general"],
-                "experience": [],
-                "education": [],
-                "projects": [],
-                "languages": ["English"],
-                "certifications": []
-            }
-        }
-    
-    # Prepare prompt
-    job_description = role_dict.get('description', '')
-    job_title = role_dict.get('name', 'General Position')
-    
-    if job_description:
-        prompt = f"""
-        Generate 5 interview questions for a {job_title} position.
-        
-        Job Title: {job_title}
-        Job Description: {job_description}
-        Experience Level: {role_dict.get('experience_level', 'mid-level')}
-        Required Skills: {', '.join(s.get('name', '') for s in role_dict.get('required_skills', []))}
-    
-    Generate questions that:
-        1. Are specific to the job title and description
-        2. Test required skills and experience level
-        3. Include both technical and behavioral aspects
-        
-        Format the response as a JSON array of exactly 5 question objects with the following structure:
-        [
-          {{
-            "id": "q1",
-            "text": {{
-              "en": "Question text in English",
-              "fr": "Question text in French",
-              "ar": "Question text in Arabic"
-            }},
-            "type": "technical" or "behavioral",
-            "difficulty": integer from 1-5,
-            "skill_tested": "Name of skill being tested",
-            "reference_answer": "A reference answer to evaluate against"
-          }},
-          ...4 more questions...
-        ]
-        
-        Ensure the JSON is valid and properly formatted. Do not include any explanations or text outside the JSON array.
-        """
-    else:
-        prompt = f"""
-        Generate 5 interview questions for a {job_title} position.
-        
-        Job Title: {job_title}
-        Experience Level: {role_dict.get('experience_level', 'mid-level')}
-        Required Skills: {', '.join(s.get('name', '') for s in role_dict.get('required_skills', []))}
-        
-        Generate questions that:
-        1. Are specific to the job title
-        2. Test required skills and experience level
-        3. Include both technical and behavioral aspects
-        
-        Format the response as a JSON array of exactly 5 question objects with the following structure:
-        [
-          {{
-            "id": "q1",
-            "text": {{
-              "en": "Question text in English",
-              "fr": "Question text in French",
-              "ar": "Question text in Arabic"
-            }},
-            "type": "technical" or "behavioral",
-            "difficulty": integer from 1-5,
-            "skill_tested": "Name of skill being tested",
-            "reference_answer": "A reference answer to evaluate against"
-          }},
-          ...4 more questions...
-        ]
-        
-        Ensure the JSON is valid and properly formatted. Do not include any explanations or text outside the JSON array.
-        """
-    
-    logger.info(f"Prompt prepared for job: {job_title}")
-    
+async def generate_questions(role_id: str) -> List[Question]:
+    """Generate interview questions using OpenRouter API"""
     try:
-        # Use Hugging Face API with fallbacks
-        logger.info(f"Attempting to use Hugging Face API")
-        response_text = await call_huggingface_with_fallbacks(
-            prompt=prompt,
-            system_prompt="You are an expert technical interviewer. You generate structured interview questions in valid JSON format only."
-        )
-        logger.info("Successfully received response from Hugging Face API")
-        logger.info(f"Response first 200 chars: {response_text[:200]}")
+        # Get role details from database
+        db = get_database()
+        role = await db["roles"].find_one({"_id": ObjectId(role_id)})
+        if not role:
+            raise ValueError("Role not found")
         
-        # Parse JSON response
-        try:
-            logger.info("Attempting to parse JSON response")
-            
-            # First attempt: Try to extract a JSON array directly
-            json_array_match = re.search(r'\[(.*)\]', response_text, re.DOTALL)
-            
-            if json_array_match:
-                # Clean up the extracted JSON array
-                json_array_text = json_array_match.group(0)
-                logger.info(f"Found JSON array: {json_array_text[:100]}...")
-                
-                # Try to parse it
-                try:
-                    questions_data = json.loads(json_array_text)
-                    if isinstance(questions_data, list) and len(questions_data) > 0:
-                        logger.info(f"Successfully parsed JSON array with {len(questions_data)} questions")
-                    else:
-                        logger.warning("JSON array was empty or not a list, using fallback questions")
-                        questions_data = generate_fallback_questions(role_dict)
-                except json.JSONDecodeError:
-                    logger.warning("Error parsing JSON array, trying to fix common issues")
-                    
-                    # Try to fix common JSON issues
-                    cleaned_json = json_array_text.replace("'", '"')  # Replace single quotes
-                    cleaned_json = re.sub(r'(\w+):', r'"\1":', cleaned_json)  # Add quotes to keys
-                    
-                    try:
-                        questions_data = json.loads(cleaned_json)
-                        logger.info(f"Successfully parsed fixed JSON with {len(questions_data)} questions")
-                    except json.JSONDecodeError:
-                        logger.error("Failed to parse JSON after cleaning, using fallback questions")
-                        questions_data = generate_fallback_questions(role_dict)
-            else:
-                logger.warning("No JSON array found in response, extracting question text directly")
-                
-                # Extract questions by looking for patterns like "Question: ..." or numbered lists
-                question_patterns = [
-                    r'"en"\s*:\s*"([^"]+)"',  # Match text in the "en" field
-                    r'"text"\s*:\s*{[^}]*"en"\s*:\s*"([^"]+)"',  # Match 'en' text inside text object
-                    r'"([^"]{30,})"',  # Match any longish quoted string that might be a question
-                    r'\d+\.\s+(.{20,}?)(?=\d+\.|$)'  # Match numbered list items
-                ]
-                
-                extracted_texts = []
-                for pattern in question_patterns:
-                    matches = re.findall(pattern, response_text)
-                    if matches:
-                        extracted_texts.extend(matches)
-                        break  # Stop after finding matches with one pattern
-                
-                if extracted_texts:
-                    logger.info(f"Extracted {len(extracted_texts)} potential questions")
-                    
-                    # Create structured questions from the extracted texts
-                    questions_data = []
-                    for i, text in enumerate(extracted_texts[:5]):  # Limit to 5 questions
-                        questions_data.append({
-                            "id": f"q_{i+1}",
-                            "text": {
-                                "en": text,
-                                "fr": text,  # Use same text as placeholder
-                                "ar": text   # Use same text as placeholder
-                            },
-                            "type": "behavioral" if i % 2 == 0 else "technical",
-                            "difficulty": min(i + 2, 5),  # Difficulty from 2-5
-                            "skill_tested": "general",
-                            "reference_answer": "A good answer would be specific and related to the candidate's experience."
-                        })
-                    logger.info(f"Created {len(questions_data)} structured questions from extracted text")
-                else:
-                    logger.error("Could not extract any question text, using fallback questions")
-                    questions_data = generate_fallback_questions(role_dict)
-                    
-        except Exception as e:
-            logger.error(f"Error parsing response: {str(e)}")
-            logger.error(f"Response: {response_text[:500]}")
-            questions_data = generate_fallback_questions(role_dict)
-            
-    except Exception as e:
-        logger.error(f"Error using Hugging Face API: {str(e)}")
-        questions_data = generate_fallback_questions(role_dict)
-    
-    # Customize questions with job title if these are fallback questions
-    if not job_description and "tell us about your experience" in questions_data[0]["text"]["en"].lower():
-        for q in questions_data:
-            if "tell us about your experience" in q["text"]["en"].lower():
-                q["text"]["en"] = f"Tell us about your experience as a {job_title}."
-                q["text"]["fr"] = f"Parlez-nous de votre expérience en tant que {job_title}."
-                q["text"]["ar"] = f"أخبرنا عن خبرتك كـ {job_title}."
-            elif "why do you want to work for our company" in q["text"]["en"].lower():
-                q["text"]["en"] = f"Why are you interested in this {job_title} position?"
-                q["text"]["fr"] = f"Pourquoi êtes-vous intéressé par ce poste de {job_title}?"
-                q["text"]["ar"] = f"لماذا أنت مهتم بوظيفة {job_title} هذه؟"
-    
-    # Create Question objects
-    questions = []
-    for i, q_data in enumerate(questions_data):
-        try:
-            # Ensure text is a dictionary
-            text_field = q_data.get('text', {})
-            if not isinstance(text_field, dict):
-                text_field = {
-                    'en': str(text_field),
-                    'fr': str(text_field),
-                    'ar': str(text_field)
-                }
-            
-            question = Question(
-                interview_id=interview.id,
-                text=text_field,
-                type=q_data.get('type', 'behavioral'),
-                difficulty=q_data.get('difficulty', 3),
-                skill_tested=q_data.get('skill_tested', ''),
-                reference_answer=q_data.get('reference_answer', ''),
-                order=i + 1,
-                time_limit=None  # Set to None to avoid validation errors
-            )
-            questions.append(question)
-        except Exception as e:
-            logger.error(f"Error creating question object: {str(e)}")
-    
-    # Ensure we have 5 questions
-    if len(questions) < 5:
-        logger.warning(f"Only generated {len(questions)} questions, adding fallback questions")
-        fallback = generate_fallback_questions(role_dict)
-        
-        for i, q_data in enumerate(fallback[len(questions):5]):
-            try:
-                question = Question(
-                    interview_id=interview.id,
-                    text=q_data['text'],
-                    type=q_data['type'],
-                    difficulty=q_data.get('difficulty', 3),
-                    skill_tested=q_data.get('skill_tested', ''),
-                    reference_answer=q_data.get('reference_answer', ''),
-                    order=len(questions) + i + 1,
-                    time_limit=None
-                )
-                questions.append(question)
-            except Exception as e:
-                logger.error(f"Error creating fallback question: {str(e)}")
-    
-    return questions
+        # Prepare the prompt based on role details
+        prompt = f"""Generate 5 interview questions for a {role['name']} position.
+Job Description: {role['description'] or role['name']}
 
-def generate_fallback_questions(role_dict: Dict) -> List[Dict]:
-    """Generate fallback questions if LLM fails"""
-    logger.info("Using fallback questions")
-    
-    # Simple predefined questions that match the expected format
-    questions_data = [
-        {
-            "id": "q_1",
-            "text": {
-                "en": "Tell us about your experience in this field.",
-                "fr": "Parlez-nous de votre expérience dans ce domaine.",
-                "ar": "أخبرنا عن خبرتك في هذا المجال."
-            },
-            "type": "behavioral",
-            "difficulty": 3,
-            "skill_tested": "communication",
-            "reference_answer": "A good answer would include relevant work experience, education, and skills."
-        },
-        {
-            "id": "q_2",
-            "text": {
-                "en": "Describe a situation where you had to solve a difficult problem.",
-                "fr": "Décrivez une situation où vous avez dû résoudre un problème difficile.",
-                "ar": "صف موقفًا كان عليك فيه حل مشكلة صعبة."
-            },
-            "type": "behavioral",
-            "difficulty": 3,
-            "skill_tested": "problem_solving",
-            "reference_answer": "A good answer would describe the problem, the solution approach, and the outcome."
-        },
-        {
-            "id": "q_3",
-            "text": {
-                "en": "What are your strengths and weaknesses?",
-                "fr": "Quelles sont vos forces et vos faiblesses ?",
-                "ar": "ما هي نقاط قوتك وضعفك؟"
-            },
-            "type": "behavioral",
-            "difficulty": 2,
-            "skill_tested": "self_awareness",
-            "reference_answer": "A good answer would include honest self-assessment with examples."
-        },
-        {
-            "id": "q_4",
-            "text": {
-                "en": "Why do you want to work for our company?",
-                "fr": "Pourquoi souhaitez-vous travailler pour notre entreprise ?",
-                "ar": "لماذا تريد العمل في شركتنا؟"
-            },
-            "type": "behavioral",
-            "difficulty": 2,
-            "skill_tested": "motivation",
-            "reference_answer": "A good answer would demonstrate knowledge of the company and alignment with its values."
-        },
-        {
-            "id": "q_5",
-            "text": {
-                "en": "How do you handle tight deadlines and pressure?",
-                "fr": "Comment gérez-vous les délais serrés et la pression ?",
-                "ar": "كيف تتعامل مع المواعيد النهائية الضيقة والضغط؟"
-            },
-            "type": "behavioral",
-            "difficulty": 3,
-            "skill_tested": "stress_management",
-            "reference_answer": "A good answer would include time management strategies and examples of handling pressure."
-        }
-    ]
-    
-    return questions_data
+Please generate a mix of technical and behavioral questions that assess the candidate's skills and experience.
+Format the response as a JSON array of question objects with these fields:
+- text: The question text
+- type: Either "technical" or "behavioral"
+- difficulty: A number from 1-5
+- skill_tested: The skill being assessed
+- reference_answer: A brief example of a good answer
+
+Example format:
+[
+    {{
+        "text": "What is your experience with [specific technology]?",
+        "type": "technical",
+        "difficulty": 3,
+        "skill_tested": "technical_knowledge",
+        "reference_answer": "A good answer would include specific examples of using the technology..."
+    }}
+]"""
+
+        # Call OpenRouter API
+        response = client.chat.completions.create(
+            model="openai/gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are an expert interviewer helping to generate relevant interview questions. Always respond with a valid JSON array of question objects."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=1000,
+            response_format={ "type": "json_object" }
+        )
+
+        # Parse the response
+        try:
+            # First try to parse the entire response as JSON
+            response_data = json.loads(response.choices[0].message.content)
+            if isinstance(response_data, dict) and "questions" in response_data:
+                questions_data = response_data["questions"]
+            else:
+                questions_data = response_data
+        except json.JSONDecodeError:
+            # If JSON parsing fails, try to extract questions from text
+            text = response.choices[0].message.content
+            questions = []
+            for line in text.split('\n'):
+                if line.strip() and '?' in line:
+                    questions.append({
+                        "text": line.strip(),
+                        "type": "behavioral",
+                        "difficulty": 3,
+                        "skill_tested": "general",
+                        "reference_answer": "A good answer would address the question directly and provide relevant examples."
+                    })
+            questions_data = questions[:5]  # Take first 5 questions
+
+        # Convert to Question objects
+        questions = []
+        for i, q_data in enumerate(questions_data):
+            # Ensure all required fields are present
+            if isinstance(q_data, str):
+                q_data = {
+                    "text": q_data,
+                    "type": "behavioral",
+                    "difficulty": 3,
+                    "skill_tested": "general",
+                    "reference_answer": "A good answer would address the question directly and provide relevant examples."
+                }
+            elif not isinstance(q_data, dict):
+                continue
+
+            questions.append(Question(
+                id=f"q_{i+1}",
+                text=q_data.get("text", ""),
+                type=q_data.get("type", "behavioral"),
+                difficulty=q_data.get("difficulty", 3),
+                skill_tested=q_data.get("skill_tested", "general"),
+                reference_answer=q_data.get("reference_answer", "A good answer would address the question directly and provide relevant examples.")
+            ))
+
+        return questions
+
+    except Exception as e:
+        logger.error(f"Error generating questions: {str(e)}")
+        raise
+
+async def translate_questions(questions: List[Dict[str, str]], target_language: str) -> List[Dict[str, str]]:
+    """
+    Translate questions to the target language using OpenRouter API.
+    """
+    try:
+        translated_questions = []
+        for question in questions:
+            # Prepare the translation prompt
+            prompt = f"""Translate the following interview question to {target_language}:
+            {question['question']}
+            
+            Return only the translated question, nothing else.
+            """
+            
+            # Get translation using OpenRouter API
+            response = client.chat.completions.create(
+                model="openchat/openchat-3.5-1210",  # or "mistralai/mistral-7b-instruct"
+                messages=[
+                    {"role": "system", "content": f"You are a professional translator. Translate the given text to {target_language}."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=500
+            )
+            
+            translated_text = response.choices[0].message.content.strip()
+            
+            # Create translated question object
+            translated_question = {
+                "question": translated_text,
+                "type": question["type"]
+            }
+            translated_questions.append(translated_question)
+        
+        return translated_questions
+        
+    except Exception as e:
+        logger.error(f"Error translating questions: {str(e)}")
+        return questions  # Return original questions if translation fails
 
 async def evaluate_answer(
     question: str,

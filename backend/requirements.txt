@@ -21,6 +21,7 @@ pyjwt==2.8.0
 requests>=2.31.0  # For API calls to Hugging Face and other services
 boto3==1.29.6
 cohere==5.14.0
+openai==1.12.0
 
 # Audio Processing
 ffmpeg-python==0.2.0
