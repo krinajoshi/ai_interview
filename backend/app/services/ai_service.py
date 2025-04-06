@@ -26,7 +26,11 @@ load_dotenv()
 # Initialize OpenAI client with OpenRouter base URL
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY")
+    api_key=os.getenv("OPENROUTER_API_KEY"),
+    default_headers={
+        "HTTP-Referer": "http://localhost:3000",  # Required for OpenRouter
+        "X-Title": "AI Interview Assistant"  # Optional, but recommended
+    }
 )
 
 # Initialize Hugging Face settings
@@ -186,28 +190,36 @@ Job Description: {role['description'] or role['name']}
 
 Please generate a mix of technical and behavioral questions that assess the candidate's skills and experience.
 Format the response as a JSON array of question objects with these fields:
-- text: The question text
+- text: A dictionary with language codes as keys and the question text in that language
 - type: Either "technical" or "behavioral"
 - difficulty: A number from 1-5
 - skill_tested: The skill being assessed
-- reference_answer: A brief example of a good answer
+- reference_answer: A dictionary with language codes as keys and the reference answer in that language
 
 Example format:
 [
     {{
-        "text": "What is your experience with [specific technology]?",
+        "text": {{
+            "en": "What is your experience with [specific technology]?",
+            "fr": "Quelle est votre expérience avec [technologie spécifique] ?",
+            "ar": "ما هي خبرتك مع [التكنولوجيا المحددة]؟"
+        }},
         "type": "technical",
         "difficulty": 3,
         "skill_tested": "technical_knowledge",
-        "reference_answer": "A good answer would include specific examples of using the technology..."
+        "reference_answer": {{
+            "en": "A good answer would include specific examples of using the technology...",
+            "fr": "Une bonne réponse inclurait des exemples spécifiques d'utilisation de la technologie...",
+            "ar": "ستتضمن الإجابة الجيدة أمثلة محددة لاستخدام التكنولوجيا..."
+        }}
     }}
 ]"""
 
-        # Call OpenRouter API
+        # Call OpenRouter API with the free model
         response = client.chat.completions.create(
-            model="openai/gpt-3.5-turbo",
+            model="meta-llama/llama-4-maverick:free",  # Using the free model
             messages=[
-                {"role": "system", "content": "You are an expert interviewer helping to generate relevant interview questions. Always respond with a valid JSON array of question objects."},
+                {"role": "system", "content": "You are an expert interviewer helping to generate relevant interview questions in multiple languages. Always respond with a valid JSON array of question objects."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
@@ -230,11 +242,19 @@ Example format:
             for line in text.split('\n'):
                 if line.strip() and '?' in line:
                     questions.append({
-                        "text": line.strip(),
+                        "text": {
+                            "en": line.strip(),
+                            "fr": line.strip(),  # Default to English if translation fails
+                            "ar": line.strip()   # Default to English if translation fails
+                        },
                         "type": "behavioral",
                         "difficulty": 3,
                         "skill_tested": "general",
-                        "reference_answer": "A good answer would address the question directly and provide relevant examples."
+                        "reference_answer": {
+                            "en": "A good answer would address the question directly and provide relevant examples.",
+                            "fr": "Une bonne réponse aborderait directement la question et fournirait des exemples pertinents.",
+                            "ar": "ستتناول الإجابة الجيدة السؤال مباشرة وتقدم أمثلة ذات صلة."
+                        }
                     })
             questions_data = questions[:5]  # Take first 5 questions
 
@@ -244,22 +264,48 @@ Example format:
             # Ensure all required fields are present
             if isinstance(q_data, str):
                 q_data = {
-                    "text": q_data,
+                    "text": {
+                        "en": q_data,
+                        "fr": q_data,  # Default to English if translation fails
+                        "ar": q_data   # Default to English if translation fails
+                    },
                     "type": "behavioral",
                     "difficulty": 3,
                     "skill_tested": "general",
-                    "reference_answer": "A good answer would address the question directly and provide relevant examples."
+                    "reference_answer": {
+                        "en": "A good answer would address the question directly and provide relevant examples.",
+                        "fr": "Une bonne réponse aborderait directement la question et fournirait des exemples pertinents.",
+                        "ar": "ستتناول الإجابة الجيدة السؤال مباشرة وتقدم أمثلة ذات صلة."
+                    }
                 }
             elif not isinstance(q_data, dict):
                 continue
 
+            # Ensure text and reference_answer are dictionaries
+            if isinstance(q_data.get("text"), str):
+                q_data["text"] = {
+                    "en": q_data["text"],
+                    "fr": q_data["text"],  # Default to English if translation fails
+                    "ar": q_data["text"]   # Default to English if translation fails
+                }
+            if isinstance(q_data.get("reference_answer"), str):
+                q_data["reference_answer"] = {
+                    "en": q_data["reference_answer"],
+                    "fr": q_data["reference_answer"],  # Default to English if translation fails
+                    "ar": q_data["reference_answer"]   # Default to English if translation fails
+                }
+
             questions.append(Question(
                 id=f"q_{i+1}",
-                text=q_data.get("text", ""),
+                text=q_data.get("text", {"en": "", "fr": "", "ar": ""}),
                 type=q_data.get("type", "behavioral"),
                 difficulty=q_data.get("difficulty", 3),
                 skill_tested=q_data.get("skill_tested", "general"),
-                reference_answer=q_data.get("reference_answer", "A good answer would address the question directly and provide relevant examples.")
+                reference_answer=q_data.get("reference_answer", {
+                    "en": "A good answer would address the question directly and provide relevant examples.",
+                    "fr": "Une bonne réponse aborderait directement la question et fournirait des exemples pertinents.",
+                    "ar": "ستتناول الإجابة الجيدة السؤال مباشرة وتقدم أمثلة ذات صلة."
+                })
             ))
 
         return questions

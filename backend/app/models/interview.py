@@ -20,11 +20,33 @@ class FacialMetrics(BaseModel):
 
 class Question(BaseModel):
     id: str
-    text: str
+    text: Dict[str, str]  # Dictionary mapping language codes to text
     type: str
-    difficulty: int = Field(ge=1, le=5)
+    difficulty: int
     skill_tested: str
-    reference_answer: str
+    reference_answer: Dict[str, str]  # Dictionary mapping language codes to text
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": "q_1",
+                "text": {
+                    "en": "What is your experience with Python?",
+                    "fr": "Quelle est votre expérience avec Python ?",
+                    "ar": "ما هي خبرتك مع بايثون؟"
+                },
+                "type": "technical",
+                "difficulty": 3,
+                "skill_tested": "programming",
+                "reference_answer": {
+                    "en": "A good answer would include specific examples of Python projects...",
+                    "fr": "Une bonne réponse inclurait des exemples spécifiques de projets Python...",
+                    "ar": "ستتضمن الإجابة الجيدة أمثلة محددة لمشاريع بايثون..."
+                }
+            }
+        }
 
 class Answer(BaseModel):
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
