@@ -19,17 +19,12 @@ class FacialMetrics(BaseModel):
     expressions: Dict[str, float]  # emotion to confidence mapping
 
 class Question(BaseModel):
-    id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
-    interview_id: PyObjectId
-    text: Dict[str, str]  # Language to text mapping
-    type: str  # technical/behavioral
-    difficulty: int  # 1-5
+    id: str
+    text: str
+    type: str
+    difficulty: int = Field(ge=1, le=5)
     skill_tested: str
     reference_answer: str
-    order: int
-    time_limit: Optional[int] = None  # in seconds
-    code_required: bool = False
-    whiteboard_required: bool = False
 
 class Answer(BaseModel):
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
@@ -51,18 +46,11 @@ class Interview(BaseModel):
     role_id: str
     language: str
     status: str
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    overall_score: Optional[float] = None
-    technical_score: Optional[float] = None
-    communication_score: Optional[float] = None
-    voice_metrics: Optional[dict] = None
-    facial_metrics: Optional[dict] = None
-    recording_url: Optional[str] = None
-    feedback_summary: Optional[str] = None
-    improvement_areas: Optional[List[str]] = None
-    questions: Optional[List[dict]] = None
-    answers: Optional[List[dict]] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    questions: Optional[List[Question]] = None
+    answers: Optional[List[Dict]] = None
+    metrics: Optional[Dict] = None
 
     class Config:
         json_encoders = {

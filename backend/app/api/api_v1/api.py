@@ -150,31 +150,10 @@ async def legacy_generate_questions(
         role_id = await insert_one("roles", role.dict(by_alias=True))
         interview.role_id = str(role_id)
         
-        # Store resume if provided
-        resume_file_name = None
-        if request.resume:
-            resume_file_name = f"resume_{current_user.id}.txt"
-            logger.info(f"Resume provided as {resume_file_name}")
-            
-            # Create a temporary resume object
-            resume = {
-                "user_id": str(current_user.id),
-                "content": request.resume,
-                "parsed_data": {
-                    "skills": ["general"],
-                    "experience": [],
-                    "education": [],
-                    "projects": [],
-                    "languages": ["English"],
-                    "certifications": []
-                }
-            }
-            await insert_one("resumes", resume)
-        
         # Try to generate questions using the AI service
         try:
             logger.info("Attempting to generate questions using AI service")
-            questions = await generate_questions(interview)
+            questions = await generate_questions(str(role_id))
             logger.info(f"Successfully received {len(questions)} questions from AI service")
             
             # Format the questions for the frontend
@@ -250,8 +229,7 @@ async def legacy_generate_questions(
         logger.info(f"Returning {len(formatted_questions)} questions to frontend")
         return {
             "status": "success",
-            "questions": formatted_questions,
-            "resumeFileName": resume_file_name
+            "questions": formatted_questions
         }
         
     except Exception as e:
@@ -267,8 +245,7 @@ async def legacy_generate_questions(
         
         return {
             "status": "success",  # Still return success to prevent frontend error
-            "questions": fallback_questions,
-            "resumeFileName": None
+            "questions": fallback_questions
         }
 
 # Legacy interview endpoint (singular) for backward compatibility

@@ -229,7 +229,7 @@ async def generate_interview_questions(
     # Generate questions
     try:
         logger.info(f"Calling generate_questions for interview {interview_id}")
-        questions = await generate_questions(interview)
+        questions = await generate_questions(interview.role_id)
         logger.info(f"Successfully generated {len(questions)} questions for interview {interview_id}")
         return questions
     except ValueError as ve:
