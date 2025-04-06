@@ -189,41 +189,55 @@ async def generate_questions(role_id: str) -> List[Question]:
 Job Description: {role['description'] or role['name']}
 
 Please generate a mix of technical and behavioral questions that assess the candidate's skills and experience.
+For each question, you MUST provide the text in English, French, and Arabic.
+
 Format the response as a JSON array of question objects with these fields:
 - text: A dictionary with language codes as keys and the question text in that language
+  - "en": English text (e.g., "What is your experience with Python?")
+  - "fr": French text (e.g., "Quelle est votre expérience avec Python ?")
+  - "ar": Arabic text (e.g., "ما هي خبرتك مع بايثون؟")
 - type: Either "technical" or "behavioral"
 - difficulty: A number from 1-5
 - skill_tested: The skill being assessed
 - reference_answer: A dictionary with language codes as keys and the reference answer in that language
+  - "en": English answer
+  - "fr": French answer
+  - "ar": Arabic answer
 
 Example format:
 [
     {{
         "text": {{
-            "en": "What is your experience with [specific technology]?",
-            "fr": "Quelle est votre expérience avec [technologie spécifique] ?",
-            "ar": "ما هي خبرتك مع [التكنولوجيا المحددة]؟"
+            "en": "What is your experience with Python?",
+            "fr": "Quelle est votre expérience avec Python ?",
+            "ar": "ما هي خبرتك مع بايثون؟"
         }},
         "type": "technical",
         "difficulty": 3,
-        "skill_tested": "technical_knowledge",
+        "skill_tested": "programming",
         "reference_answer": {{
-            "en": "A good answer would include specific examples of using the technology...",
-            "fr": "Une bonne réponse inclurait des exemples spécifiques d'utilisation de la technologie...",
-            "ar": "ستتضمن الإجابة الجيدة أمثلة محددة لاستخدام التكنولوجيا..."
+            "en": "A good answer would include specific examples of Python projects...",
+            "fr": "Une bonne réponse inclurait des exemples spécifiques de projets Python...",
+            "ar": "ستتضمن الإجابة الجيدة أمثلة محددة لمشاريع بايثون..."
         }}
     }}
-]"""
+]
+
+IMPORTANT: 
+1. Each question MUST be provided in all three languages (English, French, and Arabic)
+2. Do not use the same text for all languages - each language should have its own proper translation
+3. The format should be exactly as shown in the example
+4. Make sure the Arabic text is properly right-to-left formatted."""
 
         # Call OpenRouter API with the free model
         response = client.chat.completions.create(
             model="meta-llama/llama-4-maverick:free",  # Using the free model
             messages=[
-                {"role": "system", "content": "You are an expert interviewer helping to generate relevant interview questions in multiple languages. Always respond with a valid JSON array of question objects."},
+                {"role": "system", "content": "You are an expert interviewer and translator. Generate interview questions and provide proper translations in English, French, and Arabic. Each question and answer must be properly translated into all three languages. The Arabic text should be properly right-to-left formatted."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
-            max_tokens=1000,
+            max_tokens=2000,  # Increased token limit for multilingual content
             response_format={ "type": "json_object" }
         )
 
@@ -241,11 +255,16 @@ Example format:
             questions = []
             for line in text.split('\n'):
                 if line.strip() and '?' in line:
+                    # If we only have English text, translate it
+                    en_text = line.strip()
+                    fr_text = await translate_text(en_text, "fr")
+                    ar_text = await translate_text(en_text, "ar")
+                    
                     questions.append({
                         "text": {
-                            "en": line.strip(),
-                            "fr": line.strip(),  # Default to English if translation fails
-                            "ar": line.strip()   # Default to English if translation fails
+                            "en": en_text,
+                            "fr": fr_text,
+                            "ar": ar_text
                         },
                         "type": "behavioral",
                         "difficulty": 3,
@@ -263,11 +282,16 @@ Example format:
         for i, q_data in enumerate(questions_data):
             # Ensure all required fields are present
             if isinstance(q_data, str):
+                # If we only have English text, translate it
+                en_text = q_data
+                fr_text = await translate_text(en_text, "fr")
+                ar_text = await translate_text(en_text, "ar")
+                
                 q_data = {
                     "text": {
-                        "en": q_data,
-                        "fr": q_data,  # Default to English if translation fails
-                        "ar": q_data   # Default to English if translation fails
+                        "en": en_text,
+                        "fr": fr_text,
+                        "ar": ar_text
                     },
                     "type": "behavioral",
                     "difficulty": 3,
@@ -281,18 +305,24 @@ Example format:
             elif not isinstance(q_data, dict):
                 continue
 
-            # Ensure text and reference_answer are dictionaries
+            # Ensure text and reference_answer are dictionaries with proper translations
             if isinstance(q_data.get("text"), str):
+                en_text = q_data["text"]
+                fr_text = await translate_text(en_text, "fr")
+                ar_text = await translate_text(en_text, "ar")
                 q_data["text"] = {
-                    "en": q_data["text"],
-                    "fr": q_data["text"],  # Default to English if translation fails
-                    "ar": q_data["text"]   # Default to English if translation fails
+                    "en": en_text,
+                    "fr": fr_text,
+                    "ar": ar_text
                 }
             if isinstance(q_data.get("reference_answer"), str):
+                en_text = q_data["reference_answer"]
+                fr_text = await translate_text(en_text, "fr")
+                ar_text = await translate_text(en_text, "ar")
                 q_data["reference_answer"] = {
-                    "en": q_data["reference_answer"],
-                    "fr": q_data["reference_answer"],  # Default to English if translation fails
-                    "ar": q_data["reference_answer"]   # Default to English if translation fails
+                    "en": en_text,
+                    "fr": fr_text,
+                    "ar": ar_text
                 }
 
             questions.append(Question(
@@ -313,6 +343,31 @@ Example format:
     except Exception as e:
         logger.error(f"Error generating questions: {str(e)}")
         raise
+
+async def translate_text(text: str, target_language: str) -> str:
+    """Translate text to the target language using OpenRouter API"""
+    try:
+        # Prepare the translation prompt
+        prompt = f"""Translate the following text to {target_language}:
+        {text}
+        
+        Return only the translated text, nothing else."""
+
+        # Call OpenRouter API for translation
+        response = client.chat.completions.create(
+            model="meta-llama/llama-4-maverick:free",
+            messages=[
+                {"role": "system", "content": f"You are a professional translator. Translate the given text to {target_language}."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3,
+            max_tokens=500
+        )
+
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        logger.error(f"Error translating text: {str(e)}")
+        return text  # Return original text if translation fails
 
 async def translate_questions(questions: List[Dict[str, str]], target_language: str) -> List[Dict[str, str]]:
     """
