@@ -36,22 +36,44 @@ export const analyzeAnswer = async (
       }
     );
 
-    return response.data;
+    // Log the response for debugging
+    console.log('Analysis response:', response.data);
+
+    // Ensure all required fields are present
+    const result = {
+      score: response.data.score || 0,
+      feedback: response.data.feedback || 'No feedback available',
+      correctness_score: response.data.correctness_score || 0,
+      clarity_score: response.data.clarity_score || 0,
+      depth_score: response.data.depth_score || 0,
+      confidence_score: response.data.confidence_score || 0,
+      strengths: response.data.strengths || [],
+      weaknesses: response.data.weaknesses || [],
+      suggestions: response.data.suggestions || [],
+      keywords: {
+        found: response.data.keywords?.found || [],
+        missing: response.data.keywords?.missing || []
+      }
+    };
+
+    return result;
   } catch (error) {
     console.error('Error analyzing answer:', error);
     // Return a default analysis if the API call fails
     return {
-      score: 0.7,
+      score: 0,
       feedback: 'Unable to analyze answer at this time. Please try again later.',
-      correctness_score: 0.7,
-      clarity_score: 0.7,
-      depth_score: 0.7,
-      confidence_score: 0.7,
-      strengths: ['Clear explanation'],
-      improvements: ['Could provide more examples'],
-      suggestions: ['Consider adding more details'],
-      keywords_found: ['experience'],
-      keywords_missing: ['specific examples']
+      correctness_score: 0,
+      clarity_score: 0,
+      depth_score: 0,
+      confidence_score: 0,
+      strengths: [],
+      weaknesses: ['Unable to analyze answer'],
+      suggestions: ['Please try again'],
+      keywords: {
+        found: [],
+        missing: []
+      }
     };
   }
 };

@@ -5,10 +5,20 @@ export interface Answer {
   mediaUrl?: string;
   mediaType?: 'audio' | 'video';
   transcription?: string;
-  feedback?: {
+  analysis?: {
     score: number;
-    comments: string[];
+    feedback: string;
+    correctness_score: number;
+    clarity_score: number;
+    depth_score: number;
+    confidence_score: number;
+    strengths: string[];
+    weaknesses: string[];
     suggestions: string[];
+    keywords: {
+      found: string[];
+      missing: string[];
+    };
   };
 }
 
@@ -50,13 +60,15 @@ export interface InterviewState {
 export interface AIAnalysisResult {
   score: number;
   feedback: string;
-  correctness_score?: number;
-  clarity_score?: number;
-  depth_score?: number;
-  confidence_score?: number;
-  strengths?: string[];
-  improvements?: string[];
-  suggestions?: string[];
-  keywords_found?: string[];
-  keywords_missing?: string[];
+  correctness_score: number;
+  clarity_score: number;
+  depth_score: number;
+  confidence_score: number;
+  strengths: string[];
+  weaknesses: string[];
+  suggestions: string[];
+  keywords: {
+    found: string[];
+    missing: string[];
+  };
 } 

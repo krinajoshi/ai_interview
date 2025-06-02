@@ -36,35 +36,28 @@ async def analyze_answer(
         )
         
         # Log the result structure for debugging
-        logger.info(f"Evaluation result keys: {result.keys()}")
+        logger.info(f"Evaluation result: {result}")
         
-        # Transform the result to match the expected format
+        # Ensure all required fields are present
         transformed_result = {
-            "correctness_score": result.get("correctness_score", 0.5),
-            "clarity_score": result.get("clarity_score", 0.5),
-            "depth_score": result.get("depth_score", 0.5),
-            "confidence_score": result.get("confidence_score", 0.5),
+            "score": result.get("score", 0.0),
+            "correctness_score": result.get("correctness_score", 0.0),
+            "clarity_score": result.get("clarity_score", 0.0),
+            "depth_score": result.get("depth_score", 0.0),
+            "confidence_score": result.get("confidence_score", 0.0),
             "feedback": result.get("feedback", "No feedback available"),
-            "strengths": result.get("strengths", ["Clear explanation"]),
-            "improvements": result.get("weaknesses", ["Could provide more examples"]),
-            "suggestions": result.get("suggestions", ["Consider adding more details"]),
-            "score": result.get("score", 0.5)
+            "strengths": result.get("strengths", []),
+            "weaknesses": result.get("weaknesses", []),
+            "suggestions": result.get("suggestions", []),
+            "keywords": {
+                "found": result.get("keywords", {}).get("found", []),
+                "missing": result.get("keywords", {}).get("missing", [])
+            }
         }
         
-        # Handle keywords
-        if "keywords" in result and isinstance(result["keywords"], dict):
-            transformed_result["keywords_found"] = result["keywords"].get("found", ["experience"])
-            transformed_result["keywords_missing"] = result["keywords"].get("missing", ["specific examples"])
-        else:
-            transformed_result["keywords_found"] = result.get("keywords_found", ["experience"])
-            transformed_result["keywords_missing"] = result.get("keywords_missing", ["specific examples"])
-        
-        # Add resources
-        transformed_result["resources"] = result.get("resources", [
-            {"title": "How to Answer Interview Questions Effectively", "url": "https://example.com/interview-tips"}
-        ])
-        
+        logger.info(f"Transformed result: {transformed_result}")
         return transformed_result
+        
     except Exception as e:
         logger.error(f"Error analyzing answer: {str(e)}")
         import traceback

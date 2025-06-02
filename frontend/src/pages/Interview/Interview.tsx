@@ -60,13 +60,20 @@ const Interview: React.FC = () => {
           currentQuestion?.text?.[language] || 'No question'
         );
         
-        // Save the answer
+        // Save the answer with complete analysis data
         const answer: Answer = {
           text: answerText,
-          feedback: {
+          analysis: {
             score: analysis.score,
-            comments: [analysis.feedback],
-            suggestions: []
+            feedback: analysis.feedback,
+            correctness_score: analysis.correctness_score,
+            clarity_score: analysis.clarity_score,
+            depth_score: analysis.depth_score,
+            confidence_score: analysis.confidence_score,
+            strengths: analysis.strengths,
+            weaknesses: analysis.weaknesses,
+            suggestions: analysis.suggestions,
+            keywords: analysis.keywords
           }
         };
         
@@ -112,16 +119,23 @@ const Interview: React.FC = () => {
         currentQuestion?.text?.[language] || 'No question'
       );
       
-      // Save the answer
+      // Save the answer with complete analysis data
       const answer: Answer = {
         text: '',
         mediaUrl,
         mediaType: type,
         transcription,
-        feedback: {
+        analysis: {
           score: analysis.score,
-          comments: [analysis.feedback],
-          suggestions: []
+          feedback: analysis.feedback,
+          correctness_score: analysis.correctness_score,
+          clarity_score: analysis.clarity_score,
+          depth_score: analysis.depth_score,
+          confidence_score: analysis.confidence_score,
+          strengths: analysis.strengths,
+          weaknesses: analysis.weaknesses,
+          suggestions: analysis.suggestions,
+          keywords: analysis.keywords
         }
       };
       

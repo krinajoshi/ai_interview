@@ -114,34 +114,62 @@ const Analytics: React.FC = () => {
     
     const answers = interview.answers;
     
-    // Overall score is average of all answer scores
+    // Overall score is weighted average of all answer scores
     const overallScore = answers.reduce((sum: number, answer: any) => 
       sum + (answer.analysis?.score || 0), 0) / answers.length;
     
-    // Technical score is average of technical question scores
+    // Technical score is weighted average of technical question scores
     const technicalAnswers = answers.filter((_: any, index: number) => 
       interview.questions[index]?.type === 'technical');
     
     const technicalScore = technicalAnswers.length > 0 
       ? technicalAnswers.reduce((sum: number, answer: any) => 
-          sum + (answer.analysis?.score || 0), 0) / technicalAnswers.length
+          sum + (answer.analysis?.correctness_score || 0), 0) / technicalAnswers.length
       : 0;
     
-    // Communication score is average of behavioral question scores
-    const behavioralAnswers = answers.filter((_: any, index: number) => 
-      interview.questions[index]?.type === 'behavioral');
-    
-    const communicationScore = behavioralAnswers.length > 0 
-      ? behavioralAnswers.reduce((sum: number, answer: any) => 
-          sum + (answer.analysis?.score || 0), 0) / behavioralAnswers.length
+    // Communication score is weighted average of clarity and confidence scores
+    const communicationScore = answers.length > 0 
+      ? answers.reduce((sum: number, answer: any) => 
+          sum + ((answer.analysis?.clarity_score || 0) * 0.6 + 
+                 (answer.analysis?.confidence_score || 0) * 0.4), 0) / answers.length
       : 0;
     
     return {
       overall: overallScore,
-      technical: technicalScore || overallScore * 0.9, // Fallback if no technical questions
-      communication: communicationScore || overallScore * 0.85 // Fallback if no behavioral questions
+      technical: technicalScore || overallScore * 0.7,
+      communication: communicationScore || overallScore * 0.6
     };
   };
+
+  // Extract strengths and weaknesses from answers
+  const extractFeedback = () => {
+    if (!interview?.answers) {
+      return {
+        strengths: [],
+        weaknesses: []
+      };
+    }
+
+    const allStrengths = new Set<string>();
+    const allWeaknesses = new Set<string>();
+
+    interview.answers.forEach((answer: any) => {
+      if (answer.analysis?.strengths) {
+        answer.analysis.strengths.forEach((strength: string) => allStrengths.add(strength));
+      }
+      if (answer.analysis?.weaknesses) {
+        answer.analysis.weaknesses.forEach((weakness: string) => allWeaknesses.add(weakness));
+      }
+    });
+
+    return {
+      strengths: Array.from(allStrengths),
+      weaknesses: Array.from(allWeaknesses)
+    };
+  };
+
+  const scores = calculateScores();
+  const { strengths, weaknesses } = extractFeedback();
 
   if (loading) {
     return (
@@ -186,20 +214,6 @@ const Analytics: React.FC = () => {
       </Container>
     );
   }
-
-  const scores = calculateScores();
-  
-  // Extract strengths and weaknesses from answers
-  const strengths = [
-    'Clear communication',
-    'Strong technical knowledge',
-    'Good problem-solving approach'
-  ];
-  
-  const weaknesses = [
-    'Could provide more specific examples',
-    'Some hesitation in responses'
-  ];
 
   return (
     <Container maxWidth="lg">
@@ -271,15 +285,15 @@ const Analytics: React.FC = () => {
                   answerText={answer?.text || ''}
                   transcription={answer?.transcription}
                   analysis={{
-                    score: answer?.analysis?.score || 0.5,
+                    score: answer?.analysis?.score || 0,
                     feedback: answer?.analysis?.feedback || 'No feedback available',
-                    strengths: ['Clear explanation', 'Good technical understanding'],
-                    weaknesses: ['Could provide more examples'],
-                    suggestions: ['Consider mentioning specific use cases'],
+                    strengths: answer?.analysis?.strengths || [],
+                    weaknesses: answer?.analysis?.weaknesses || [],
+                    suggestions: answer?.analysis?.suggestions || [],
                     keywords: {
                       expected: ['algorithm', 'complexity', 'optimization'],
-                      found: ['algorithm', 'complexity'],
-                      missing: ['optimization']
+                      found: answer?.analysis?.keywords?.found || [],
+                      missing: answer?.analysis?.keywords?.missing || []
                     }
                   }}
                   language={language}

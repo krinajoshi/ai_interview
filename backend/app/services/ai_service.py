@@ -3,9 +3,18 @@ import uuid
 import random
 from typing import List, Dict, Optional
 import re
+import cohere
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# Initialize Cohere client
+co = cohere.Client(os.getenv('COHERE_API_KEY'))
 
 # Role-specific question templates
 ROLE_TEMPLATES = {
@@ -387,110 +396,150 @@ async def evaluate_answer(
     user_answer: str,
     code_submission: Optional[str] = None
 ) -> Dict:
-    """Generate meaningful feedback for interview answers"""
-    # Default scores
-    correctness = 0.7
-    clarity = 0.8
-    depth = 0.6
-    confidence = 0.75
-    
-    # Adjust scores based on answer length
-    if user_answer:
-        answer_length = len(user_answer)
-        if answer_length < 10:
-            # Very short answers get lower scores
-            depth = 0.2
-            clarity = 0.3
-            correctness = 0.3
-            confidence = 0.2
-        elif answer_length < 50:
-            # Short answers get moderately lower scores
-            depth = 0.4
-            clarity = 0.5
-            correctness = 0.5
-            confidence = 0.4
-    
-    # Generate feedback based on the question type
-    question_lower = question.lower()
-    
-    # Leadership or behavioral questions
-    if "leadership" in question_lower or "demonstrated leadership" in question_lower:
-        feedback = "When discussing leadership, provide specific examples of situations where you led a team, took initiative, or influenced others positively."
-        strengths = ["Leadership awareness", "Self-reflection"]
-        weaknesses = ["Could provide specific examples", "Could mention outcomes achieved"]
-        suggestions = ["Describe a specific situation where you demonstrated leadership", "Explain the impact of your leadership actions"]
-        keywords_found = ["leadership", "skills"]
-        keywords_missing = ["initiative", "team", "results", "influence"]
-    
-    # CI/CD specific questions
-    elif "ci/cd" in question_lower or "devops" in question_lower or "continuous integration" in question_lower or "continuous deployment" in question_lower or "pipeline" in question_lower or "jenkins" in question_lower or "github actions" in question_lower or "gitlab ci" in question_lower:
-        feedback = "When discussing CI/CD practices, mention specific tools, pipelines, and how they improved your development workflow."
-        strengths = ["Technical awareness", "Process understanding"]
-        weaknesses = ["Could provide specific examples", "Could mention specific tools"]
-        suggestions = ["Mention specific CI/CD tools you've used", "Describe a specific pipeline you implemented"]
-        keywords_found = ["automation", "pipeline"]
-        keywords_missing = ["Jenkins", "GitHub Actions", "testing", "deployment"]
-    
-    # Product management questions
-    elif "product manager" in question_lower:
-        feedback = "For product management roles, focus on your experience with product lifecycle, user research, and feature prioritization."
-        strengths = ["Clear explanation", "Good product understanding"]
-        weaknesses = ["Could provide more examples", "Could discuss prioritization methods"]
-        suggestions = ["Consider mentioning specific products you've managed", "Discuss how you gather user feedback"]
-        keywords_found = ["product", "management"]
-        keywords_missing = ["roadmap", "stakeholders", "metrics"]
-    
-    # Software engineering questions
-    elif "software" in question_lower or "developer" in question_lower or "engineer" in question_lower:
-        feedback = "For technical roles, highlight your programming skills, problem-solving approach, and experience with relevant technologies."
-        strengths = ["Clear explanation", "Good technical understanding"]
-        weaknesses = ["Could provide more examples", "Could mention specific technologies"]
-        suggestions = ["Consider mentioning specific projects", "Discuss your approach to problem-solving"]
-        keywords_found = ["algorithm", "complexity"]
-        keywords_missing = ["optimization", "testing", "architecture"]
-    
-    # General behavioral questions
-    elif any(phrase in question_lower for phrase in ["tell me about a time", "describe a situation", "how do you handle", "experience with"]):
-        feedback = "For behavioral questions, use the STAR method: Situation, Task, Action, and Result to structure your answer with specific examples."
-        strengths = ["Self-awareness", "Communication skills"]
-        weaknesses = ["Could provide specific examples", "Could describe outcomes"]
-        suggestions = ["Use a specific example from your experience", "Explain what you learned from the situation"]
-        keywords_found = ["experience", "skills"]
-        keywords_missing = ["specific example", "outcome", "learning"]
-    
-    # Default case
-    else:
-        feedback = "Provide specific examples from your experience that demonstrate your skills and achievements."
-        strengths = ["Clear explanation", "Good understanding"]
-        weaknesses = ["Could provide more examples", "Could be more specific"]
-        suggestions = ["Consider mentioning specific use cases", "Quantify your achievements when possible"]
-        keywords_found = ["experience", "skills"]
-        keywords_missing = ["teamwork", "challenges", "solutions"]
-    
-    # Calculate overall score
-    overall_score = (correctness + clarity + depth + confidence) / 4
-    
-    return {
-        "score": overall_score,
-        "correctness_score": correctness,
-        "clarity_score": clarity,
-        "depth_score": depth,
-        "confidence_score": confidence,
-        "feedback": feedback,
-        "strengths": strengths,
-        "weaknesses": weaknesses,
-        "suggestions": suggestions,
-        "keywords": {
-            "found": keywords_found,
-            "missing": keywords_missing
-        },
-        "resources": [
-            {
-                "title": "How to Answer Interview Questions Effectively",
-                "url": "https://example.com/interview-tips"
+    """Generate meaningful feedback for interview answers using Cohere AI"""
+    # Check if answer is too short
+    if not user_answer or len(user_answer.strip()) < 10:
+        return {
+            "score": 0.0,
+            "correctness_score": 0.0,
+            "clarity_score": 0.0,
+            "depth_score": 0.0,
+            "confidence_score": 0.0,
+            "feedback": "Your answer is too short. Please provide a more detailed response that includes specific examples and explanations.",
+            "strengths": [],
+            "weaknesses": [
+                "Answer too brief",
+                "Lacks specific examples",
+                "Missing detailed explanation"
+            ],
+            "suggestions": [
+                "Expand your answer with specific examples from your experience",
+                "Include relevant details about the situation",
+                "Explain your thought process and reasoning",
+                "Describe the outcome and what you learned"
+            ],
+            "keywords": {
+                "found": [],
+                "missing": ["specific examples", "experience", "details", "explanation"]
             }
-        ]
-    }
+        }
+
+    try:
+        # Prepare a more concise prompt for Cohere
+        prompt = f"""Analyze this interview answer:
+Q: {question}
+A: {user_answer}
+
+Provide scores (0-1) and feedback in JSON format:
+{{
+    "correctness_score": float,  # How well they answered
+    "clarity_score": float,      # How clear their explanation is
+    "depth_score": float,        # How detailed their answer is
+    "confidence_score": float,   # How confident they sound
+    "strengths": [string],       # What they did well
+    "weaknesses": [string],      # What they could improve
+    "suggestions": [string],     # How they can improve
+    "keywords": {{
+        "found": [string],       # Terms they used
+        "missing": [string]      # Terms they should use
+    }}
+}}"""
+
+        # Generate analysis using Cohere with optimized parameters
+        response = co.generate(
+            prompt=prompt,
+            max_tokens=300,  # Reduced from 500
+            temperature=0.2,  # Reduced from 0.3 for more consistent output
+            k=0,
+            p=0.9,
+            frequency_penalty=0.1,
+            presence_penalty=0.1,
+            stop_sequences=["Q:", "A:"],  # Simplified stop sequences
+            return_likelihoods='NONE'
+        )
+
+        # Parse the response
+        try:
+            analysis = eval(response.generations[0].text.strip())
+        except Exception as e:
+            logger.error(f"Error parsing Cohere response: {str(e)}")
+            logger.error(f"Raw response: {response.generations[0].text}")
+            # Fallback to basic analysis
+            analysis = {
+                "correctness_score": 0.5,
+                "clarity_score": 0.5,
+                "depth_score": 0.5,
+                "confidence_score": 0.5,
+                "strengths": ["Basic answer provided"],
+                "weaknesses": ["Could not analyze in detail"],
+                "suggestions": ["Try providing more specific examples"],
+                "keywords": {
+                    "found": [],
+                    "missing": ["specific examples", "details"]
+                }
+            }
+
+        # Calculate overall score with weights
+        overall_score = (
+            analysis['correctness_score'] * 0.4 +
+            analysis['clarity_score'] * 0.3 +
+            analysis['depth_score'] * 0.2 +
+            analysis['confidence_score'] * 0.1
+        )
+
+        # Generate concise feedback summary
+        feedback_parts = []
+        
+        if overall_score >= 0.8:
+            feedback_parts.append("Excellent answer! ")
+        elif overall_score >= 0.6:
+            feedback_parts.append("Good answer. ")
+        else:
+            feedback_parts.append("Your answer needs improvement. ")
+
+        if analysis['strengths']:
+            feedback_parts.append("Strengths: " + ", ".join(analysis['strengths'][:2]) + ". ")
+        
+        if analysis['weaknesses']:
+            feedback_parts.append("Areas for improvement: " + ", ".join(analysis['weaknesses'][:2]) + ". ")
+        
+        if analysis['suggestions']:
+            feedback_parts.append("Suggestions: " + ", ".join(analysis['suggestions'][:2]) + ".")
+
+        return {
+            "score": overall_score,
+            "correctness_score": analysis['correctness_score'],
+            "clarity_score": analysis['clarity_score'],
+            "depth_score": analysis['depth_score'],
+            "confidence_score": analysis['confidence_score'],
+            "feedback": " ".join(feedback_parts),
+            "strengths": analysis['strengths'][:2],  # Limit to top 2
+            "weaknesses": analysis['weaknesses'][:2],  # Limit to top 2
+            "suggestions": analysis['suggestions'][:2],  # Limit to top 2
+            "keywords": {
+                "found": analysis['keywords']['found'][:3],  # Limit to top 3
+                "missing": analysis['keywords']['missing'][:3]  # Limit to top 3
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error in Cohere analysis: {str(e)}")
+        # Fallback to basic analysis if Cohere fails
+        return {
+            "score": 0.0,
+            "correctness_score": 0.0,
+            "clarity_score": 0.0,
+            "depth_score": 0.0,
+            "confidence_score": 0.0,
+            "feedback": "Unable to generate detailed feedback at this time. Please try again.",
+            "strengths": [],
+            "weaknesses": ["Could not analyze in detail"],
+            "suggestions": ["Try providing more specific examples", "Include more details"],
+            "keywords": {
+                "found": [],
+                "missing": ["specific examples", "details"]
+            }
+        }
 
 async def analyze_voice(audio_data: bytes) -> Dict:
     """Mock voice analysis"""
