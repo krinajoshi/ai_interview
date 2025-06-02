@@ -2,9 +2,7 @@
 fastapi==0.104.1
 uvicorn==0.24.0
 python-multipart==0.0.6
-pydantic>=2.0.0
-pydantic-settings>=2.0.0  # For Pydantic v2 settings support
-python-decouple==3.8
+pydantic>=1.10.0,<2.0.0
 
 # Database
 pymongo==4.6.0
@@ -22,6 +20,12 @@ requests>=2.31.0  # For API calls to Hugging Face and other services
 boto3==1.29.6
 cohere==5.14.0
 openai==1.12.0
+transformers>=4.36.0  # For local Hugging Face models
+torch>=2.1.0  # Required by transformers
+accelerate>=0.25.0  # For optimized model loading
+bitsandbytes>=0.41.0  # For 8-bit quantization
+sentencepiece>=0.1.99  # For tokenization
+protobuf>=4.25.1  # Required by transformers
 
 # Audio Processing
 ffmpeg-python==0.2.0

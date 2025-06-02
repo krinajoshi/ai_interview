@@ -1,65 +1,112 @@
 {
   "common": {
-    "welcome": "مرحباً بك في منصة المقابلات الذكية",
-    "login": "تسجيل الدخول",
-    "register": "تسجيل",
-    "logout": "تسجيل الخروج",
-    "profile": "الملف الشخصي",
-    "dashboard": "لوحة التحكم",
-    "interview": "مقابلة",
-    "analytics": "التحليلات",
-    "settings": "الإعدادات"
+    "loading": "جاري التحميل...",
+    "error": "حدث خطأ",
+    "success": "تم بنجاح!",
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "delete": "حذف",
+    "edit": "تعديل",
+    "view": "عرض",
+    "back": "رجوع",
+    "next": "التالي",
+    "previous": "السابق",
+    "finish": "إنهاء"
   },
   "auth": {
+    "login": "تسجيل الدخول",
+    "register": "إنشاء حساب",
+    "logout": "تسجيل الخروج",
     "email": "البريد الإلكتروني",
     "password": "كلمة المرور",
     "confirmPassword": "تأكيد كلمة المرور",
+    "name": "الاسم",
     "forgotPassword": "نسيت كلمة المرور؟",
     "noAccount": "ليس لديك حساب؟",
     "haveAccount": "لديك حساب بالفعل؟",
     "signUp": "إنشاء حساب",
     "signIn": "تسجيل الدخول"
   },
-  "interview": {
-    "start": "بدء المقابلة",
-    "end": "إنهاء المقابلة",
-    "pause": "إيقاف مؤقت",
-    "resume": "استئناف",
-    "stop": "إيقاف",
-    "next": "السؤال التالي",
-    "previous": "السؤال السابق",
-    "submit": "إرسال الإجابة",
-    "feedback": "عرض التعليقات"
+  "nav": {
+    "home": "الرئيسية",
+    "dashboard": "لوحة التحكم",
+    "interview": "المقابلة",
+    "profile": "الملف الشخصي",
+    "analytics": "التحليلات"
+  },
+  "home": {
+    "title": "التحضير للمقابلات بالذكاء الاصطناعي",
+    "subtitle": "تدرب على المقابلات بلغات متعددة مع تعليقات الذكاء الاصطناعي",
+    "getStarted": "ابدأ الآن",
+    "learnMore": "اعرف المزيد"
   },
   "dashboard": {
-    "upcomingInterviews": "المقابلات القادمة",
-    "pastInterviews": "المقابلات السابقة",
-    "performance": "نظرة عامة على الأداء",
-    "skills": "تقييم المهارات",
-    "recommendations": "التوصيات"
+    "title": "لوحة التحكم",
+    "recentInterviews": "المقابلات الأخيرة",
+    "statistics": "الإحصائيات",
+    "completedInterviews": "المقابلات المكتملة",
+    "averageScore": "متوسط النتيجة",
+    "questionsAnswered": "الأسئلة المجاب عليها",
+    "startNewInterview": "مقابلة جديدة",
+    "noInterviews": "لم تقم بإجراء أي مقابلات بعد.",
+    "startFirst": "ابدأ مقابلتك الأولى"
+  },
+  "interview": {
+    "setup": {
+      "title": "إعداد المقابلة",
+      "jobTitle": "المسمى الوظيفي",
+      "jobDescription": "وصف الوظيفة",
+      "jobDescriptionHelp": "الصق وصف الوظيفة هنا لتوليد أسئلة أكثر صلة.",
+      "requiredInfo": "المعلومات المطلوبة",
+      "optionalInfo": "معلومات اختيارية",
+      "uploadResume": "تحميل السيرة الذاتية",
+      "fileSelected": "الملف المحدد",
+      "startInterview": "بدء المقابلة",
+      "generatingQuestions": "جاري توليد الأسئلة..."
+    },
+    "session": {
+      "questions": "أسئلة المقابلة",
+      "answerWith": "أجب بالنص أو الصوت أو الفيديو:",
+      "typeAnswer": "اكتب إجابتك هنا...",
+      "recording": "تسجيل",
+      "recorded": "تم التسجيل",
+      "context": "السياق:"
+    },
+    "completion": {
+      "title": "تمت المقابلة!",
+      "thankYou": "شكراً لإكمال المقابلة. تم تسجيل إجاباتك وتحليلها.",
+      "redirecting": "جارٍ إعادة التوجيه إلى لوحة التحكم..."
+    }
+  },
+  "analytics": {
+    "title": "تحليل المقابلة",
+    "summary": "ملخص المقابلة",
+    "overallScore": "النتيجة الإجمالية",
+    "technicalScore": "النتيجة التقنية",
+    "communicationScore": "نتيجة التواصل",
+    "strengths": "نقاط القوة",
+    "weaknesses": "نقاط الضعف",
+    "question": "السؤال",
+    "yourAnswer": "إجابتك",
+    "feedback": "التعليقات",
+    "keywords": "الكلمات الرئيسية",
+    "keywordsFound": "الكلمات الرئيسية الموجودة:",
+    "keywordsMissing": "الكلمات الرئيسية المفقودة:",
+    "noKeywordsFound": "لم يتم العثور على كلمات رئيسية",
+    "allKeywordsFound": "تم ذكر جميع الكلمات الرئيسية المتوقعة"
   },
   "profile": {
+    "title": "الملف الشخصي",
     "personalInfo": "المعلومات الشخصية",
     "updateProfile": "تحديث الملف الشخصي",
     "changePassword": "تغيير كلمة المرور",
-    "experience": "الخبرة",
-    "education": "التعليم",
-    "skills": "المهارات",
-    "resume": "السيرة الذاتية",
-    "uploadResume": "تحميل السيرة الذاتية"
+    "language": "اللغة المفضلة",
+    "deleteAccount": "حذف الحساب",
+    "deleteWarning": "لا يمكن التراجع عن هذا الإجراء. سيتم حذف جميع بياناتك نهائيًا."
   },
-  "analytics": {
-    "overview": "نظرة عامة على التحليلات",
-    "technicalScore": "النتيجة التقنية",
-    "communicationScore": "نتيجة التواصل",
-    "progress": "التقدم مع الوقت",
-    "improvement": "مجالات التحسين"
-  },
-  "errors": {
-    "required": "هذا الحقل مطلوب",
-    "invalidEmail": "عنوان البريد الإلكتروني غير صالح",
-    "passwordMismatch": "كلمات المرور غير متطابقة",
-    "serverError": "حدث خطأ في الخادم",
-    "networkError": "حدث خطأ في الشبكة"
+  "setup": {
+    "jobTitle": "المسمى الوظيفي",
+    "jobDescription": "وصف الوظيفة",
+    "jobDescriptionHelp": "الصق وصف الوظيفة هنا لتوليد أسئلة أكثر صلة."
   }
-} 
+}

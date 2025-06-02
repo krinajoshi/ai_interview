@@ -1,35 +1,35 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
-// Import translations
-import enTranslations from './i18n/locales/en.json';
-import frTranslations from './i18n/locales/fr.json';
-import arTranslations from './i18n/locales/ar.json';
+import enTranslation from './locales/en.json';
+import frTranslation from './locales/fr.json';
+import arTranslation from './locales/ar.json';
 
+// the translations
 const resources = {
   en: {
-    translation: enTranslations,
+    translation: enTranslation
   },
   fr: {
-    translation: frTranslations,
+    translation: frTranslation
   },
   ar: {
-    translation: arTranslations,
-  },
+    translation: arTranslation
+  }
 };
 
 i18n
-  .use(initReactI18next)
+  .use(initReactI18next) // passes i18n down to react-i18next
   .init({
     resources,
-    lng: 'en', // Default language
-    fallbackLng: 'en',
+    lng: 'en', // default language
+    keySeparator: '.', // to support nested translations
     interpolation: {
-      escapeValue: false, // React already escapes by default
+      escapeValue: false // react already safes from xss
     },
     react: {
-      useSuspense: false // This is important for the new version
+      useSuspense: false // prevents issues with SSR
     }
   });
 
-export default i18n; 
+export default i18n;

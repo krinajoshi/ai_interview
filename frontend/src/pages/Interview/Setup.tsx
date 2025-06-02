@@ -1,290 +1,149 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
-  Container,
   Box,
   Typography,
   TextField,
   Button,
   Paper,
-  Alert,
+  Grid,
   CircularProgress,
-  Divider,
+  Alert,
 } from '@mui/material';
 import { useAppDispatch, useAppSelector } from '../../store';
-import {
-  setJobTitle,
-  setResume,
-  setJobDescription,
-  setQuestions,
+import { 
+  setJobTitle, 
+  setJobDescription, 
+  generateQuestions, 
   startInterview,
-  setLoading,
-  setError,
+  setLanguage
 } from '../../features/interview/interviewSlice';
-import LanguageSelector from '../../components/LanguageSelector';
-import { useTranslation } from 'react-i18next';
+import LanguageSelector, { Language } from '../../components/LanguageSelector';
 
-const API_URL = process.env.REACT_APP_API_URL;
-
-interface InterviewSetupProps {
-  onStart: () => void;
+interface SetupProps {
+  onComplete: () => void;
 }
 
-const InterviewSetup: React.FC<InterviewSetupProps> = ({ onStart }) => {
-  const navigate = useNavigate();
+const Setup: React.FC<SetupProps> = ({ onComplete }) => {
   const dispatch = useAppDispatch();
-  const { loading, error, selectedLanguage } = useAppSelector((state) => state.interview);
-  const { t } = useTranslation();
-
-  const [jobTitleInput, setJobTitleInput] = useState('');
-  const [resumeFile, setResumeFile] = useState<File | null>(null);
-  const [jobDescriptionText, setJobDescriptionText] = useState('');
-  const [storedResumeFile, setStoredResumeFile] = useState<string | null>(null);
-
-  const handleBack = () => {
-    navigate('/dashboard');
-  };
-
-  const handleResumeUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setResumeFile(file);
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const text = e.target?.result as string;
-        dispatch(setResume(text));
-      };
-      reader.readAsText(file);
-    }
-  };
-
-  const handleStartInterview = async () => {
-    if (!jobTitleInput.trim()) {
-      dispatch(setError('Please enter a job title'));
+  const { jobTitle, jobDescription, loading, error, selectedLanguage } = useAppSelector(
+    (state) => state.interview
+  );
+  
+  const [formError, setFormError] = useState('');
+  
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Form validation
+    if (!jobTitle.trim()) {
+      setFormError('Job title is required');
       return;
     }
-
-    dispatch(setLoading(true));
-    dispatch(setError(null));
-
+    
+    setFormError('');
+    
     try {
-      // Get the auth token from localStorage
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('Not authenticated');
-      }
-
-      // Prepare the request payload
-      const payload = {
-        jobTitle: jobTitleInput,
-        resume: resumeFile ? await resumeFile.text() : null,
-        jobDescription: jobDescriptionText || null,
-        language: selectedLanguage,
-      };
-
-      // Make API call to generate questions
-      const response = await fetch(`${API_URL}/api/v1/interview/generate-questions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('API Error:', errorData);
-        throw new Error(errorData.detail || 'Failed to generate interview questions');
-      }
-
-      const data = await response.json();
-      console.log("Response data:", data);
+      // Generate questions
+      await dispatch(generateQuestions({ 
+        jobTitle, 
+        jobDescription: jobDescription || undefined,
+        language: selectedLanguage 
+      })).unwrap();
       
-      if (!data.questions) {
-        console.error("No questions in response:", data);
-        throw new Error('No questions received from server');
-      }
-      
-      // Save the resume file name if returned
-      if (data.resumeFileName) {
-        setStoredResumeFile(data.resumeFileName);
-      }
-
-      // Validate the questions format
-      if (!Array.isArray(data.questions) || data.questions.length === 0) {
-        console.error("Questions is not an array or is empty:", data.questions);
-        throw new Error('Invalid questions format received from server');
-      }
-
-      // Ensure each question has the required structure
-      const validQuestions = data.questions.every((q: any) => {
-        const isValid = q.id && q.text && typeof q.text === 'object' && q.text[selectedLanguage] && q.type;
-        if (!isValid) {
-          console.error("Invalid question format:", q);
-          console.error(`id: ${Boolean(q.id)}, text: ${Boolean(q.text)}, text object: ${q.text && typeof q.text === 'object'}, selected language: ${q.text && q.text[selectedLanguage]}, type: ${Boolean(q.type)}`);
-        }
-        return isValid;
-      });
-
-      if (!validQuestions) {
-        throw new Error('Invalid question format received from server');
-      }
-
-      // Set the interview state
-      dispatch(setJobTitle(jobTitleInput));
-      dispatch(setJobDescription(jobDescriptionText || null));
-      dispatch(setQuestions(data.questions));
+      // Start interview
       dispatch(startInterview());
       
-      // Navigate to the interview page
-      navigate('/interview');
-    } catch (error) {
-      console.error('Interview setup error:', error);
-      dispatch(setError(error instanceof Error ? error.message : 'Failed to start interview'));
-    } finally {
-      dispatch(setLoading(false));
+      // Notify parent component
+      onComplete();
+    } catch (err) {
+      console.error('Failed to generate questions:', err);
     }
   };
-
-  const handleStart = () => {
-    onStart();
+  
+  const handleLanguageChange = (lang: Language) => {
+    dispatch(setLanguage(lang));
   };
 
   return (
-    <Container maxWidth="md">
-      <Box sx={{ py: 4 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <Typography variant="h4">
-            {selectedLanguage === 'fr' ? 'Configuration de l\'entretien' :
-             selectedLanguage === 'ar' ? 'إعداد المقابلة' :
-             'Interview Setup'}
-          </Typography>
-          <Button
-            variant="outlined"
-            onClick={handleBack}
-          >
-            {selectedLanguage === 'fr' ? 'Retour au tableau de bord' :
-             selectedLanguage === 'ar' ? 'العودة إلى لوحة التحكم' :
-             'Back to Dashboard'}
-          </Button>
-        </Box>
-
-        <Paper sx={{ p: 3, mb: 3, direction: selectedLanguage === 'ar' ? 'rtl' : 'ltr' }}>
-          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-          {storedResumeFile && (
-            <Alert severity="success" sx={{ mb: 2 }}>
-              {selectedLanguage === 'fr' ? 'CV enregistré avec succès : ' :
-               selectedLanguage === 'ar' ? ' :تم حفظ السيرة الذاتية بنجاح' :
-               'Resume stored successfully: '}
-              {storedResumeFile}
-            </Alert>
-          )}
-
-          <Box sx={{ mb: 3 }}>
+    <Paper sx={{ p: 3 }}>
+      <Typography variant="h5" gutterBottom>
+        Interview Setup
+      </Typography>
+      
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {formError && <Alert severity="error" sx={{ mb: 2 }}>{formError}</Alert>}
+      
+      <Box component="form" onSubmit={handleSubmit}>
+        <Grid container spacing={3}>
+          <Grid item xs={12}>
             <Typography variant="h6" gutterBottom>
-              {selectedLanguage === 'fr' ? 'Informations requises' :
-               selectedLanguage === 'ar' ? 'المعلومات المطلوبة' :
-               'Required Information'}
+              Required Information
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              {selectedLanguage === 'fr' ? 'Veuillez entrer le titre du poste pour lequel vous postulez.' :
-               selectedLanguage === 'ar' ? '.يرجى إدخال المسمى الوظيفي الذي تتقدم له' :
-               'Please enter the job title you are applying for.'}
+          </Grid>
+          
+          <Grid item xs={12}>
+            <TextField
+              required
+              fullWidth
+              id="jobTitle"
+              label="Job Title"
+              value={jobTitle}
+              onChange={(e) => dispatch(setJobTitle(e.target.value))}
+              disabled={loading}
+              helperText="Enter the job title you're interviewing for"
+            />
+          </Grid>
+          
+          <Grid item xs={12}>
+            <LanguageSelector 
+              value={selectedLanguage} 
+              onChange={handleLanguageChange}
+              label="Preferred Language" 
+            />
+          </Grid>
+          
+          <Grid item xs={12}>
+            <Typography variant="h6" gutterBottom>
+              Optional Information
             </Typography>
+          </Grid>
+          
+          <Grid item xs={12}>
             <TextField
               fullWidth
-              label={t('setup.jobTitle')}
-              value={jobTitleInput}
-              onChange={(e) => setJobTitleInput(e.target.value)}
-              required
-              error={!!error}
-              helperText={error}
-              sx={{ mb: 2 }}
+              id="jobDescription"
+              label="Job Description"
+              multiline
+              rows={4}
+              value={jobDescription || ''}
+              onChange={(e) => dispatch(setJobDescription(e.target.value))}
+              disabled={loading}
+              helperText="Paste the job description here to generate more relevant questions"
             />
-          </Box>
-
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            {t('setup.jobDescriptionHelp')}
-          </Typography>
+          </Grid>
           
-          <TextField
-            fullWidth
-            label={t('setup.jobDescription')}
-            value={jobDescriptionText}
-            onChange={(e) => setJobDescriptionText(e.target.value)}
-            multiline
-            rows={4}
-            sx={{ mb: 2 }}
-          />
-
-          <Divider sx={{ my: 3 }} />
-
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              {selectedLanguage === 'fr' ? 'Informations optionnelles' :
-               selectedLanguage === 'ar' ? 'معلومات اختيارية' :
-               'Optional Information'}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              {selectedLanguage === 'fr' ? 
-                'Fournir votre CV et la description du poste aidera à générer des questions plus pertinentes.' :
-               selectedLanguage === 'ar' ?
-                '.تقديم سيرتك الذاتية ووصف الوظيفة سيساعد في توليد أسئلة أكثر صلة' :
-                'Providing your resume and job description will help generate more relevant questions.'}
-            </Typography>
-
-            <Box sx={{ mb: 2 }}>
-              <input
-                accept=".txt,.pdf,.doc,.docx"
-                style={{ display: 'none' }}
-                id="resume-file"
-                type="file"
-                onChange={handleResumeUpload}
-              />
-              <label htmlFor="resume-file">
-                <Button variant="outlined" component="span" fullWidth>
-                  {selectedLanguage === 'fr' ? 'Télécharger le CV' :
-                   selectedLanguage === 'ar' ? 'تحميل السيرة الذاتية' :
-                   'Upload Resume'}
-                </Button>
-              </label>
-              {resumeFile && (
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  {selectedLanguage === 'fr' ? 'Fichier sélectionné : ' :
-                   selectedLanguage === 'ar' ? ' :الملف المحدد' :
-                   'File selected: '}
-                  {resumeFile.name}
-                </Typography>
+          <Grid item xs={12}>
+            <Button
+              type="submit"
+              variant="contained"
+              size="large"
+              fullWidth
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <CircularProgress size={24} sx={{ mr: 1 }} />
+                  Generating Questions...
+                </>
+              ) : (
+                'Start Interview'
               )}
-            </Box>
-          </Box>
-
-          <Button
-            variant="contained"
-            fullWidth
-            onClick={handleStartInterview}
-            disabled={loading || !jobTitleInput.trim()}
-            sx={{ mt: 2 }}
-          >
-            {loading ? (
-              <>
-                <CircularProgress size={24} sx={{ mr: 1 }} />
-                {selectedLanguage === 'fr' ? 'Génération des questions...' :
-                 selectedLanguage === 'ar' ? '...جاري توليد الأسئلة' :
-                 'Generating Questions...'}
-              </>
-            ) : (
-              selectedLanguage === 'fr' ? 'Commencer l\'entretien' :
-              selectedLanguage === 'ar' ? 'بدء المقابلة' :
-              'Start Interview'
-            )}
-          </Button>
-        </Paper>
+            </Button>
+          </Grid>
+        </Grid>
       </Box>
-    </Container>
+    </Paper>
   );
 };
 
-export default InterviewSetup; 
+export default Setup;

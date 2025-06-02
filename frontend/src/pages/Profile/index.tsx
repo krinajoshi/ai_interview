@@ -1,203 +1,205 @@
-import * as React from 'react';
-import { useTranslation } from 'react-i18next';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Container,
   Box,
   Typography,
-  Paper,
   TextField,
   Button,
-  Grid,
+  Paper,
   Avatar,
-  Divider,
+  Grid,
   Alert,
+  CircularProgress,
+  Divider,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
 } from '@mui/material';
-import { useAppSelector } from '../../store';
+import { useAppDispatch, useAppSelector } from '../../store';
+import { logout } from '../../features/auth/authSlice';
+import LanguageSelector, { Language } from '../../components/LanguageSelector';
 
 const Profile: React.FC = () => {
-  const { t } = useTranslation();
-  const user = useAppSelector((state) => state.auth.user);
-  const [loading, setLoading] = React.useState(false);
-  const [success, setSuccess] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [isEditing, setIsEditing] = React.useState(false);
-
-  const [formData, setFormData] = React.useState({
-    name: user?.name || '',
-    email: user?.email || '',
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  });
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
-
+  const navigate = useNavigate();
+  const dispatch = useAppDispatch();
+  const { user, isAuthenticated } = useAppSelector((state) => state.auth);
+  
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [language, setLanguage] = useState<Language>('en');
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState('');
+  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate('/login');
+    }
+    
+    if (user) {
+      setName(user.name || '');
+      setEmail(user.email || '');
+      setLanguage(user.preferred_language as Language || 'en');
+    }
+  }, [user, isAuthenticated, navigate]);
+  
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    
     setLoading(true);
-    setError(null);
     setSuccess(false);
-
+    setError('');
+    
     try {
-      // TODO: Implement API call to update profile
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate API call
+      // API call to update profile would go here
+      
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
       setSuccess(true);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to update profile');
+    } catch (err: any) {
+      setError(err.message || 'Failed to update profile');
     } finally {
       setLoading(false);
     }
   };
-
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
+  
+  const handleDeleteAccount = async () => {
     setLoading(true);
-    setError(null);
-    setSuccess(false);
-
-    if (formData.newPassword !== formData.confirmPassword) {
-      setError(t('auth.passwordsDoNotMatch'));
-      setLoading(false);
-      return;
-    }
-
+    
     try {
-      // TODO: Implement API call to change password
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // Simulate API call
-      setSuccess(true);
-      setFormData({
-        ...formData,
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: '',
-      });
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to change password');
-    } finally {
+      // API call to delete account would go here
+      
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      dispatch(logout());
+      navigate('/login');
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete account');
       setLoading(false);
     }
+  };
+  
+  const handleLanguageChange = (lang: Language) => {
+    setLanguage(lang);
   };
 
   return (
     <Container maxWidth="md">
       <Box sx={{ py: 4 }}>
         <Typography variant="h4" gutterBottom>
-          {t('common.profile')}
+          Profile
         </Typography>
-
-        <Grid container spacing={3}>
-          {/* Profile Information */}
-          <Grid item xs={12}>
-            <Paper sx={{ p: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                <Avatar
-                  sx={{ width: 64, height: 64, mr: 2 }}
-                  src={user?.avatar}
-                >
-                  {user?.name?.charAt(0)}
-                </Avatar>
-                <Box>
-                  <Typography variant="h6">{user?.name}</Typography>
-                  <Typography color="text.secondary">{user?.email}</Typography>
-                </Box>
-              </Box>
-
-              {success && (
-                <Alert severity="success" sx={{ mb: 2 }}>
-                  Profile updated successfully!
-                </Alert>
-              )}
-              {error && (
-                <Alert severity="error" sx={{ mb: 2 }}>
-                  {error}
-                </Alert>
-              )}
-
-              <form onSubmit={handleUpdateProfile}>
-                <TextField
-                  fullWidth
-                  margin="normal"
-                  label="Full Name"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                />
-                <TextField
-                  fullWidth
-                  margin="normal"
-                  label="Email"
-                  name="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                />
-                <Button
-                  type="submit"
-                  variant="contained"
-                  disabled={loading}
-                  sx={{ mt: 2 }}
-                >
-                  {loading ? 'Updating...' : t('profile.updateProfile')}
-                </Button>
-              </form>
-            </Paper>
-          </Grid>
-
-          {/* Change Password */}
-          <Grid item xs={12}>
-            <Paper sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                {t('profile.changePassword')}
+        
+        <Paper sx={{ p: 3, mb: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+            <Avatar
+              sx={{ width: 64, height: 64, mr: 2 }}
+              src={user?.avatar || undefined}
+            >
+              {user?.name?.charAt(0)}
+            </Avatar>
+            <Box>
+              <Typography variant="h6">{user?.name}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {user?.email}
               </Typography>
-              <Divider sx={{ mb: 3 }} />
-
-              <form onSubmit={handleChangePassword}>
+            </Box>
+          </Box>
+          
+          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+          {success && <Alert severity="success" sx={{ mb: 2 }}>Profile updated successfully</Alert>}
+          
+          <Box component="form" onSubmit={handleUpdateProfile}>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  margin="normal"
-                  type="password"
-                  label="Current Password"
-                  name="currentPassword"
-                  value={formData.currentPassword}
-                  onChange={handleChange}
-                />
-                <TextField
-                  fullWidth
-                  margin="normal"
-                  type="password"
-                  label="New Password"
-                  name="newPassword"
-                  value={formData.newPassword}
-                  onChange={handleChange}
-                />
-                <TextField
-                  fullWidth
-                  margin="normal"
-                  type="password"
-                  label="Confirm New Password"
-                  name="confirmPassword"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                />
-                <Button
-                  type="submit"
-                  variant="contained"
+                  label="Name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                   disabled={loading}
-                  sx={{ mt: 2 }}
-                >
-                  {loading ? 'Updating...' : t('profile.changePassword')}
-                </Button>
-              </form>
-            </Paper>
-          </Grid>
-        </Grid>
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={loading}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Preferred Language</InputLabel>
+                  <LanguageSelector 
+                    value={language} 
+                    onChange={handleLanguageChange} 
+                  />
+                </FormControl>
+              </Grid>
+            </Grid>
+            
+            <Box sx={{ mt: 3 }}>
+              <Button
+                type="submit"
+                variant="contained"
+                disabled={loading}
+              >
+                {loading ? <CircularProgress size={24} /> : 'Update Profile'}
+              </Button>
+            </Box>
+          </Box>
+        </Paper>
+        
+        <Paper sx={{ p: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Account Settings
+          </Typography>
+          
+          <Divider sx={{ my: 2 }} />
+          
+          <Box sx={{ mt: 2 }}>
+            <Button
+              variant="outlined"
+              color="error"
+              onClick={() => setOpenDeleteDialog(true)}
+            >
+              Delete Account
+            </Button>
+          </Box>
+        </Paper>
+        
+        <Dialog
+          open={openDeleteDialog}
+          onClose={() => setOpenDeleteDialog(false)}
+        >
+          <DialogTitle>Delete Account</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              Are you sure you want to delete your account? This action cannot be undone.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOpenDeleteDialog(false)}>Cancel</Button>
+            <Button onClick={handleDeleteAccount} color="error" disabled={loading}>
+              {loading ? <CircularProgress size={24} /> : 'Delete'}
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </Container>
   );
 };
 
-export default Profile; 
+export default Profile;

@@ -1,128 +1,250 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
+import React, { useState } from 'react';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import {
   AppBar,
-  Toolbar,
-  Typography,
-  Button,
-  IconButton,
   Box,
+  Toolbar,
+  IconButton,
+  Typography,
   Menu,
+  Container,
+  Avatar,
+  Button,
+  Tooltip,
   MenuItem,
+  Drawer,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Divider,
 } from '@mui/material';
 import {
-  AccountCircle,
   Menu as MenuIcon,
-  Language,
+  Dashboard as DashboardIcon,
+  Person as PersonIcon,
+  Logout as LogoutIcon,
+  Login as LoginIcon,
+  PersonAdd as PersonAddIcon,
+  Translate as TranslateIcon,
 } from '@mui/icons-material';
-import { useAppSelector, useAppDispatch } from '../../store';
+import { useAppDispatch, useAppSelector } from '../../store';
 import { logout } from '../../features/auth/authSlice';
+import LanguageSelector, { Language } from '../LanguageSelector';
+
+const pages = [
+  { name: 'Dashboard', path: '/dashboard' },
+  { name: 'Practice', path: '/interview' },
+];
 
 const Navbar: React.FC = () => {
-  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const isAuthenticated = useAppSelector((state) => state.auth?.isAuthenticated);
+  const { isAuthenticated, user } = useAppSelector((state) => state.auth);
+  const [anchorElUser, setAnchorElUser] = useState<null | HTMLElement>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [language, setLanguage] = useState<Language>('en');
 
-  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-  const [langAnchorEl, setLangAnchorEl] = React.useState<null | HTMLElement>(null);
-
-  const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
+  const handleOpenUserMenu = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorElUser(event.currentTarget);
   };
 
-  const handleLangMenu = (event: React.MouseEvent<HTMLElement>) => {
-    setLangAnchorEl(event.currentTarget);
+  const handleCloseUserMenu = () => {
+    setAnchorElUser(null);
   };
 
-  const handleClose = () => {
-    setAnchorEl(null);
-  };
-
-  const handleLangClose = () => {
-    setLangAnchorEl(null);
-  };
-
-  const handleLanguageChange = (lang: string) => {
-    i18n.changeLanguage(lang);
-    handleLangClose();
+  const handleDrawerToggle = () => {
+    setDrawerOpen(!drawerOpen);
   };
 
   const handleLogout = () => {
     dispatch(logout());
+    handleCloseUserMenu();
     navigate('/login');
   };
 
+  const handleLanguageChange = (lang: Language) => {
+    setLanguage(lang);
+    // In a real app, you would dispatch an action to update the language in the store
+  };
+
+  const drawer = (
+    <Box sx={{ width: 250 }} role="presentation" onClick={handleDrawerToggle}>
+      <List>
+        <ListItem>
+          <Typography variant="h6" noWrap component="div">
+            AI Interview Prep
+          </Typography>
+        </ListItem>
+        <Divider />
+        {pages.map((page) => (
+          <ListItem 
+            button 
+            key={page.name} 
+            component={RouterLink} 
+            to={page.path}
+          >
+            <ListItemIcon>
+              {page.name === 'Dashboard' ? <DashboardIcon /> : <PersonIcon />}
+            </ListItemIcon>
+            <ListItemText primary={page.name} />
+          </ListItem>
+        ))}
+      </List>
+      <Divider />
+      <List>
+        {isAuthenticated ? (
+          <>
+            <ListItem button component={RouterLink} to="/profile">
+              <ListItemIcon>
+                <PersonIcon />
+              </ListItemIcon>
+              <ListItemText primary="Profile" />
+            </ListItem>
+            <ListItem button onClick={handleLogout}>
+              <ListItemIcon>
+                <LogoutIcon />
+              </ListItemIcon>
+              <ListItemText primary="Logout" />
+            </ListItem>
+          </>
+        ) : (
+          <>
+            <ListItem button component={RouterLink} to="/login">
+              <ListItemIcon>
+                <LoginIcon />
+              </ListItemIcon>
+              <ListItemText primary="Login" />
+            </ListItem>
+            <ListItem button component={RouterLink} to="/register">
+              <ListItemIcon>
+                <PersonAddIcon />
+              </ListItemIcon>
+              <ListItemText primary="Register" />
+            </ListItem>
+          </>
+        )}
+      </List>
+    </Box>
+  );
+
   return (
     <AppBar position="static">
-      <Toolbar>
-        <IconButton
-          size="large"
-          edge="start"
-          color="inherit"
-          aria-label="menu"
-          sx={{ mr: 2 }}
-        >
-          <MenuIcon />
-        </IconButton>
-        
-        <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-          {t('common.welcome')}
-        </Typography>
+      <Container maxWidth="xl">
+        <Toolbar disableGutters>
+          <IconButton
+            color="inherit"
+            aria-label="open drawer"
+            edge="start"
+            onClick={handleDrawerToggle}
+            sx={{ mr: 2, display: { md: 'none' } }}
+          >
+            <MenuIcon />
+          </IconButton>
+          
+          <Typography
+            variant="h6"
+            noWrap
+            component={RouterLink}
+            to="/"
+            sx={{
+              mr: 2,
+              display: { xs: 'none', md: 'flex' },
+              fontWeight: 700,
+              color: 'inherit',
+              textDecoration: 'none',
+            }}
+          >
+            AI Interview Prep
+          </Typography>
 
-        <IconButton
-          color="inherit"
-          onClick={handleLangMenu}
-        >
-          <Language />
-        </IconButton>
-        <Menu
-          anchorEl={langAnchorEl}
-          open={Boolean(langAnchorEl)}
-          onClose={handleLangClose}
-        >
-          <MenuItem onClick={() => handleLanguageChange('en')}>English</MenuItem>
-          <MenuItem onClick={() => handleLanguageChange('fr')}>Français</MenuItem>
-          <MenuItem onClick={() => handleLanguageChange('ar')}>العربية</MenuItem>
-        </Menu>
+          <Box sx={{ flexGrow: 1, display: { xs: 'none', md: 'flex' } }}>
+            {pages.map((page) => (
+              <Button
+                key={page.name}
+                component={RouterLink}
+                to={page.path}
+                sx={{ my: 2, color: 'white', display: 'block' }}
+              >
+                {page.name}
+              </Button>
+            ))}
+          </Box>
 
-        {isAuthenticated ? (
-          <Box>
-            <IconButton
-              size="large"
-              aria-label="account of current user"
-              aria-controls="menu-appbar"
-              aria-haspopup="true"
-              onClick={handleMenu}
-              color="inherit"
-            >
-              <AccountCircle />
-            </IconButton>
-            <Menu
-              id="menu-appbar"
-              anchorEl={anchorEl}
-              open={Boolean(anchorEl)}
-              onClose={handleClose}
-            >
-              <MenuItem onClick={() => navigate('/profile')}>{t('common.profile')}</MenuItem>
-              <MenuItem onClick={() => navigate('/dashboard')}>{t('common.dashboard')}</MenuItem>
-              <MenuItem onClick={handleLogout}>{t('common.logout')}</MenuItem>
-            </Menu>
+          <Box sx={{ flexGrow: 0, display: 'flex', alignItems: 'center' }}>
+            <Box sx={{ width: 120, mr: 2 }}>
+              <LanguageSelector value={language} onChange={handleLanguageChange} />
+            </Box>
+            
+            {isAuthenticated ? (
+              <>
+                <Tooltip title="Open settings">
+                  <IconButton onClick={handleOpenUserMenu} sx={{ p: 0 }}>
+                    <Avatar alt={user?.name || 'User'} src="/static/images/avatar/2.jpg" />
+                  </IconButton>
+                </Tooltip>
+                <Menu
+                  sx={{ mt: '45px' }}
+                  id="menu-appbar"
+                  anchorEl={anchorElUser}
+                  anchorOrigin={{
+                    vertical: 'top',
+                    horizontal: 'right',
+                  }}
+                  keepMounted
+                  transformOrigin={{
+                    vertical: 'top',
+                    horizontal: 'right',
+                  }}
+                  open={Boolean(anchorElUser)}
+                  onClose={handleCloseUserMenu}
+                >
+                  <MenuItem component={RouterLink} to="/profile" onClick={handleCloseUserMenu}>
+                    <ListItemIcon>
+                      <PersonIcon fontSize="small" />
+                    </ListItemIcon>
+                    <Typography textAlign="center">Profile</Typography>
+                  </MenuItem>
+                  <MenuItem onClick={handleLogout}>
+                    <ListItemIcon>
+                      <LogoutIcon fontSize="small" />
+                    </ListItemIcon>
+                    <Typography textAlign="center">Logout</Typography>
+                  </MenuItem>
+                </Menu>
+              </>
+            ) : (
+              <Box sx={{ display: 'flex' }}>
+                <Button
+                  component={RouterLink}
+                  to="/login"
+                  sx={{ color: 'white', mr: 1 }}
+                >
+                  Login
+                </Button>
+                <Button
+                  component={RouterLink}
+                  to="/register"
+                  variant="outlined"
+                  sx={{ color: 'white', borderColor: 'white' }}
+                >
+                  Register
+                </Button>
+              </Box>
+            )}
           </Box>
-        ) : (
-          <Box>
-            <Button color="inherit" onClick={() => navigate('/login')}>
-              {t('common.login')}
-            </Button>
-            <Button color="inherit" onClick={() => navigate('/register')}>
-              {t('common.register')}
-            </Button>
-          </Box>
-        )}
-      </Toolbar>
+        </Toolbar>
+      </Container>
+      
+      <Drawer
+        anchor="left"
+        open={drawerOpen}
+        onClose={handleDrawerToggle}
+      >
+        {drawer}
+      </Drawer>
     </AppBar>
   );
 };
 
-export default Navbar; 
+export default Navbar;

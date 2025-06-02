@@ -1,16 +1,13 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { ThemeProvider } from '@mui/material/styles';
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { Provider } from 'react-redux';
-import { I18nextProvider } from 'react-i18next';
+import { useAppDispatch, useAppSelector } from './store';
+import { fetchCurrentUser } from './features/auth/authSlice';
 
-import theme from './styles/theme';
-import store from './store';
-import i18n from './i18n';
-
-// Layout
+// Components
 import Layout from './components/Layout';
+import ProtectedRoute from './components/ProtectedRoute';
 
 // Pages
 import Home from './pages/Home';
@@ -18,67 +15,98 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Interview from './pages/Interview';
-import Profile from './pages/Profile';
 import Analytics from './pages/Analytics';
+import Profile from './pages/Profile';
 
-// Protected Route Component
-import ProtectedRoute from './components/ProtectedRoute';
+// Create theme
+const theme = createTheme({
+  palette: {
+    primary: {
+      main: '#1976d2',
+    },
+    secondary: {
+      main: '#dc004e',
+    },
+  },
+  typography: {
+    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+  },
+});
 
 const App: React.FC = () => {
-  console.log('App rendering...');
-  
+  const dispatch = useAppDispatch();
+  const { token, loading } = useAppSelector((state) => state.auth);
+
+  useEffect(() => {
+    if (token) {
+      dispatch(fetchCurrentUser());
+    }
+  }, [dispatch, token]);
+
+  if (loading && token) {
+    // Initial loading state when checking authentication
+    return <div>Loading...</div>;
+  }
+
   return (
-    <Provider store={store}>
-      <I18nextProvider i18n={i18n}>
-        <ThemeProvider theme={theme}>
-          <CssBaseline />
-          <div style={{ minHeight: '100vh', backgroundColor: '#f5f5f5' }}>
-            <BrowserRouter>
-              <Layout>
-                <Routes>
-                  <Route path="/" element={<Home />} />
-                  <Route path="/login" element={<Login />} />
-                  <Route path="/register" element={<Register />} />
-                  <Route
-                    path="/dashboard"
-                    element={
-                      <ProtectedRoute>
-                        <Dashboard />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/interview"
-                    element={
-                      <ProtectedRoute>
-                        <Interview />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/profile"
-                    element={
-                      <ProtectedRoute>
-                        <Profile />
-                      </ProtectedRoute>
-                    }
-                  />
-                  <Route
-                    path="/analytics"
-                    element={
-                      <ProtectedRoute>
-                        <Analytics />
-                      </ProtectedRoute>
-                    }
-                  />
-                </Routes>
-              </Layout>
-            </BrowserRouter>
-          </div>
-        </ThemeProvider>
-      </I18nextProvider>
-    </Provider>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Router>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Home />} />
+            <Route path="login" element={<Login />} />
+            <Route path="register" element={<Register />} />
+            
+            {/* Protected routes */}
+            <Route 
+              path="dashboard" 
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="interview" 
+              element={
+                <ProtectedRoute>
+                  <Interview />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="analytics" 
+              element={
+                <ProtectedRoute>
+                  <Analytics />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="analytics/:interviewId" 
+              element={
+                <ProtectedRoute>
+                  <Analytics />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="profile" 
+              element={
+                <ProtectedRoute>
+                  <Profile />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* Catch all route */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </Router>
+    </ThemeProvider>
   );
 };
 
-export default App; 
+export default App;

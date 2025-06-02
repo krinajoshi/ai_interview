@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List, Dict
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field
 from .user import PyObjectId
 from bson import ObjectId
 
@@ -19,32 +19,24 @@ class FacialMetrics(BaseModel):
     expressions: Dict[str, float]  # emotion to confidence mapping
 
 class Question(BaseModel):
-    id: str
-    text: Dict[str, str]  # Dictionary mapping language codes to text
+    id: Optional[str] = None
+    text: str
     type: str
     difficulty: int
     skill_tested: str
-    reference_answer: Dict[str, str]  # Dictionary mapping language codes to text
+    reference_answer: str
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
     class Config:
-        json_schema_extra = {
+        schema_extra = {
             "example": {
                 "id": "q_1",
-                "text": {
-                    "en": "What is your experience with Python?",
-                    "fr": "Quelle est votre expérience avec Python ?",
-                    "ar": "ما هي خبرتك مع بايثون؟"
-                },
+                "text": "What is your experience with test automation frameworks?",
                 "type": "technical",
                 "difficulty": 3,
-                "skill_tested": "programming",
-                "reference_answer": {
-                    "en": "A good answer would include specific examples of Python projects...",
-                    "fr": "Une bonne réponse inclurait des exemples spécifiques de projets Python...",
-                    "ar": "ستتضمن الإجابة الجيدة أمثلة محددة لمشاريع بايثون..."
-                }
+                "skill_tested": "testing",
+                "reference_answer": "A good answer would include specific examples of test automation frameworks used, challenges faced, and best practices followed."
             }
         }
 
@@ -61,6 +53,10 @@ class Answer(BaseModel):
     learning_resources: List[Dict[str, str]]  # List of {title: str, url: str}
     code_submission: Optional[str]
     whiteboard_submission: Optional[str]  # S3 link to image
+
+    class Config:
+        arbitrary_types_allowed = True
+        json_encoders = {ObjectId: str}
 
 class Interview(BaseModel):
     id: Optional[str] = Field(default_factory=lambda: str(ObjectId()))
@@ -96,4 +92,4 @@ class InterviewUpdate(BaseModel):
 
 class InterviewInResponse(BaseModel):
     interview: Interview
-    next_question: Optional[Question] 
+    next_question: Optional[Question]

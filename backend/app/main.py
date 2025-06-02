@@ -1,114 +1,53 @@
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
+import logging
+
 from app.core.config import settings
 from app.api.api_v1.api import api_router
-from app.core.middleware import (
-    ErrorLoggingMiddleware,
-    RateLimitMiddleware,
-    SecurityHeadersMiddleware
+from app.db.mongodb import init_db
+from app.services.user_service import create_mock_user_if_empty
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
-from app.core.exceptions import AIInterviewException
-from app.db.mongodb import connect_to_mongo, close_mongo_connection
-from app.core.deps import get_current_user
-import uvicorn
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title=settings.PROJECT_NAME,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json"
+    title="AI Interview Preparation API",
+    description="API for AI-powered interview preparation",
+    version="0.1.0",
 )
 
-# Configure CORS
+# Set up CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",  # Local development
-        "https://ai-interview-vxe9.onrender.com"  # Production frontend
-    ],
+    allow_origins=settings.BACKEND_CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods
-    allow_headers=["*"],  # Allow all headers
-    expose_headers=["*"],
-    max_age=3600,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
-
-# Add other middleware after CORS
-app.add_middleware(ErrorLoggingMiddleware)
-app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(RateLimitMiddleware)
 
 # Include API router
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
-# Event handlers for MongoDB connection
 @app.on_event("startup")
-async def startup_db_client():
-    try:
-        await connect_to_mongo()
-        print("Successfully connected to MongoDB")
-    except Exception as e:
-        print(f"Failed to connect to MongoDB: {str(e)}")
-        raise
+async def startup_event():
+    """Initialize database and create mock user on startup"""
+    logger.info("Starting application...")
+    await init_db()
+    await create_mock_user_if_empty()
+    logger.info("Application startup complete")
 
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    try:
-        await close_mongo_connection()
-        print("Successfully closed MongoDB connection")
-    except Exception as e:
-        print(f"Error closing MongoDB connection: {str(e)}")
+@app.get("/")
+async def root():
+    return {"message": "Welcome to AI Interview Preparation API"}
 
-# Health check endpoint
 @app.get("/health")
 async def health_check():
-    """
-    Health check endpoint.
-    """
-    return {"status": "ok", "message": "API is running"}
-
-# Test endpoint for authentication
-@app.get("/test-auth")
-async def test_auth(current_user = Depends(get_current_user)):
-    """
-    Test endpoint for authentication.
-    """
-    return {
-        "status": "ok",
-        "message": "Authentication successful",
-        "user_id": str(current_user.id),
-        "email": current_user.email
-    }
-
-# Exception handlers
-@app.exception_handler(AIInterviewException)
-async def ai_interview_exception_handler(request: Request, exc: AIInterviewException):
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"detail": exc.detail}
-    )
-
-@app.exception_handler(Exception)
-async def general_exception_handler(request: Request, exc: Exception):
-    # Add logging for debugging
-    import traceback
-    print(f"Unhandled exception: {str(exc)}")
-    print("Traceback:")
-    print(traceback.format_exc())
-    
-    return JSONResponse(
-        status_code=500,
-        content={
-            "detail": f"An unexpected error occurred: {str(exc)}",
-            "traceback": traceback.format_exc() if settings.DEBUG else None
-        }
-    )
+    return {"status": "healthy"}
 
 if __name__ == "__main__":
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="debug"
-    ) 
+    import uvicorn
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

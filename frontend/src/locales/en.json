@@ -1,65 +1,112 @@
 {
   "common": {
-    "welcome": "Welcome to AI Interview Platform",
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "success": "Success!",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "view": "View",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "finish": "Finish"
+  },
+  "auth": {
     "login": "Login",
     "register": "Register",
     "logout": "Logout",
-    "profile": "Profile",
-    "dashboard": "Dashboard",
-    "interview": "Interview",
-    "analytics": "Analytics",
-    "settings": "Settings"
-  },
-  "auth": {
     "email": "Email",
     "password": "Password",
     "confirmPassword": "Confirm Password",
+    "name": "Name",
     "forgotPassword": "Forgot Password?",
     "noAccount": "Don't have an account?",
     "haveAccount": "Already have an account?",
     "signUp": "Sign Up",
     "signIn": "Sign In"
   },
-  "interview": {
-    "start": "Start Interview",
-    "end": "End Interview",
-    "pause": "Pause",
-    "resume": "Resume",
-    "stop": "Stop",
-    "next": "Next Question",
-    "previous": "Previous Question",
-    "submit": "Submit Answer",
-    "feedback": "View Feedback"
+  "nav": {
+    "home": "Home",
+    "dashboard": "Dashboard",
+    "interview": "Interview",
+    "profile": "Profile",
+    "analytics": "Analytics"
+  },
+  "home": {
+    "title": "AI Interview Preparation",
+    "subtitle": "Practice interviews in multiple languages with AI feedback",
+    "getStarted": "Get Started",
+    "learnMore": "Learn More"
   },
   "dashboard": {
-    "upcomingInterviews": "Upcoming Interviews",
-    "pastInterviews": "Past Interviews",
-    "performance": "Performance Overview",
-    "skills": "Skills Assessment",
-    "recommendations": "Recommendations"
+    "title": "Dashboard",
+    "recentInterviews": "Recent Interviews",
+    "statistics": "Statistics",
+    "completedInterviews": "Completed Interviews",
+    "averageScore": "Average Score",
+    "questionsAnswered": "Questions Answered",
+    "startNewInterview": "Start New Interview",
+    "noInterviews": "You haven't completed any interviews yet.",
+    "startFirst": "Start your first interview"
+  },
+  "interview": {
+    "setup": {
+      "title": "Interview Setup",
+      "jobTitle": "Job Title",
+      "jobDescription": "Job Description",
+      "jobDescriptionHelp": "Paste the job description here to generate more relevant questions.",
+      "requiredInfo": "Required Information",
+      "optionalInfo": "Optional Information",
+      "uploadResume": "Upload Resume",
+      "fileSelected": "File selected",
+      "startInterview": "Start Interview",
+      "generatingQuestions": "Generating Questions..."
+    },
+    "session": {
+      "questions": "Interview Questions",
+      "answerWith": "Answer with text, audio, or video:",
+      "typeAnswer": "Type your answer here...",
+      "recording": "Recording",
+      "recorded": "recorded",
+      "context": "Context:"
+    },
+    "completion": {
+      "title": "Interview Complete!",
+      "thankYou": "Thank you for completing the interview. Your responses have been recorded and analyzed.",
+      "redirecting": "Redirecting to dashboard..."
+    }
+  },
+  "analytics": {
+    "title": "Interview Analysis",
+    "summary": "Interview Summary",
+    "overallScore": "Overall Score",
+    "technicalScore": "Technical Score",
+    "communicationScore": "Communication Score",
+    "strengths": "Strengths",
+    "weaknesses": "Areas for Improvement",
+    "question": "Question",
+    "yourAnswer": "Your Answer",
+    "feedback": "Feedback",
+    "keywords": "Keywords",
+    "keywordsFound": "Keywords Found:",
+    "keywordsMissing": "Missing Keywords:",
+    "noKeywordsFound": "No keywords found",
+    "allKeywordsFound": "All expected keywords were mentioned"
   },
   "profile": {
+    "title": "Profile",
     "personalInfo": "Personal Information",
     "updateProfile": "Update Profile",
     "changePassword": "Change Password",
-    "experience": "Experience",
-    "education": "Education",
-    "skills": "Skills",
-    "resume": "Resume",
-    "uploadResume": "Upload Resume"
+    "language": "Preferred Language",
+    "deleteAccount": "Delete Account",
+    "deleteWarning": "This action cannot be undone. All your data will be permanently deleted."
   },
-  "analytics": {
-    "overview": "Analytics Overview",
-    "technicalScore": "Technical Score",
-    "communicationScore": "Communication Score",
-    "progress": "Progress Over Time",
-    "improvement": "Areas for Improvement"
-  },
-  "errors": {
-    "required": "This field is required",
-    "invalidEmail": "Invalid email address",
-    "passwordMismatch": "Passwords do not match",
-    "serverError": "Server error occurred",
-    "networkError": "Network error occurred"
+  "setup": {
+    "jobTitle": "Job Title",
+    "jobDescription": "Job Description",
+    "jobDescriptionHelp": "Paste the job description here to generate more relevant questions."
   }
-} 
+}

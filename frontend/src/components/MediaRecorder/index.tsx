@@ -15,8 +15,8 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PauseIcon from '@mui/icons-material/Pause';
 
 interface MediaRecorderProps {
-  onRecordingComplete: (mediaBlob: Blob, type: 'audio' | 'video') => void;
-  questionId: string; // Add this to track which question we're recording for
+  onRecordingComplete: (mediaBlob: Blob | null, type: 'audio' | 'video' | null) => void;
+  questionId: string;
   existingRecording?: {
     url: string;
     type: 'audio' | 'video';
@@ -143,7 +143,7 @@ const MediaRecorderComponent: React.FC<MediaRecorderProps> = ({
       mediaStreamRef.current.getTracks().forEach(track => track.stop());
     }
     // Notify parent that recording was deleted
-    onRecordingComplete(null as any, null as any);
+    onRecordingComplete(null, null);
   };
 
   const hasRecording = mediaBlob || existingRecording;
@@ -217,4 +217,4 @@ const MediaRecorderComponent: React.FC<MediaRecorderProps> = ({
   );
 };
 
-export default MediaRecorderComponent; 
+export default MediaRecorderComponent;

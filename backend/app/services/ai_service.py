@@ -1,413 +1,385 @@
-from typing import List, Dict, Optional
 import logging
-import json
-import requests
-import os
+import uuid
+import random
+from typing import List, Dict, Optional
 import re
-from ..core.config import settings
-from ..models.interview import Interview, Question
-from ..models.resume import Resume, ParsedResumeData
-from ..db.mongodb import get_database
-import boto3
-import docx2txt
-import PyPDF2
-import io
-import bson
-from openai import OpenAI
-from dotenv import load_dotenv
-from bson.objectid import ObjectId
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Load environment variables
-load_dotenv()
-
-# Initialize OpenAI client with OpenRouter base URL
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY"),
-    default_headers={
-        "HTTP-Referer": "http://localhost:3000",  # Required for OpenRouter
-        "X-Title": "AI Interview Assistant"  # Optional, but recommended
-    }
-)
-
-# Initialize Hugging Face settings
-HUGGINGFACE_API_TOKEN = settings.HUGGINGFACE_API_TOKEN
-HUGGINGFACE_ENDPOINT = settings.HUGGINGFACE_ENDPOINT
-
-# Define fallback models
-HUGGINGFACE_MODELS = {
-    "primary": settings.HUGGINGFACE_ENDPOINT,
-    "fallbacks": [
-        "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2",
-        "https://api-inference.huggingface.co/models/meta-llama/Llama-2-7b-chat-hf",
-        "https://api-inference.huggingface.co/models/google/gemma-7b-it",
-        "https://api-inference.huggingface.co/models/openchat/openchat-3.5-1210"
-    ]
-}
-
-# Initialize AWS services if credentials are available
-try:
-    if all([settings.AWS_ACCESS_KEY_ID, settings.AWS_SECRET_ACCESS_KEY, settings.AWS_REGION]):
-        rekognition = boto3.client(
-            'rekognition',
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=settings.AWS_REGION
-        )
-    else:
-        rekognition = None
-        logger.warning("AWS credentials not fully configured. Rekognition features will be unavailable.")
-except Exception as e:
-    rekognition = None
-    logger.error(f"Error initializing AWS services: {str(e)}")
-
-# Fallback questions in case LLM generation fails
-FALLBACK_QUESTIONS = {
-    "technical": [
-        "Explain the concept of Object-Oriented Programming and its core principles.",
-        "What's the difference between a thread and a process?",
-        "How would you optimize a database query that's running slowly?",
-        "Explain the concept of REST API and its core principles.",
-        "What is the difference between HTTP and HTTPS?",
+# Role-specific question templates
+ROLE_TEMPLATES = {
+    "software engineer": [
+        "What experience do you have with {language} programming and how have you used it to solve complex problems?",
+        "Describe a challenging software architecture you designed for a {project_type} project. What patterns did you use and why?",
+        "How do you approach debugging a complex issue in a large codebase?",
+        "Explain your process for code reviews and ensuring code quality in a team environment.",
+        "How do you stay updated with the latest software development practices in the {technology} field?",
+        "Describe your experience with containerization and orchestration tools like Docker and Kubernetes.",
+        "How do you handle technical debt in your projects?",
+        "What CI/CD practices have you implemented in your previous roles?",
+        "Explain your approach to writing unit tests and integration tests.",
+        "How do you ensure security best practices in your code?",
+        "Describe a time when you had to optimize code for performance. What techniques did you use?",
+        "How do you approach learning a new programming language or framework?",
+        "What's your experience with microservices architecture?",
+        "How do you handle version control conflicts in a team setting?",
+        "Describe your experience with cloud platforms like AWS, Azure, or GCP."
     ],
-    "behavioral": [
-        "Describe a challenging project you worked on and how you overcame obstacles.",
-        "Tell me about a time when you had to learn a new technology quickly.",
-        "How do you handle disagreements with team members?",
-        "Describe your approach to meeting tight deadlines.",
-        "How do you stay updated with the latest technologies in your field?",
+    "data scientist": [
+        "Describe your experience with {ml_technique} and how you've applied it to solve real-world problems.",
+        "How do you approach feature selection and engineering in your machine learning models?",
+        "Explain a time when you had to communicate complex data findings to non-technical stakeholders.",
+        "What techniques do you use to handle imbalanced datasets in {ml_application} projects?",
+        "How do you validate the performance of your machine learning models and ensure they generalize well?",
+        "Describe your experience with big data technologies like Spark or Hadoop.",
+        "How do you approach A/B testing and experimental design?",
+        "What methods do you use to handle missing data in your datasets?",
+        "Explain your process for model selection and hyperparameter tuning.",
+        "How do you ensure that your models are fair and unbiased?",
+        "Describe a challenging data cleaning problem you've faced and how you solved it.",
+        "What visualization tools do you use to communicate your findings?",
+        "How do you approach time series forecasting problems?",
+        "Explain your experience with deep learning frameworks like TensorFlow or PyTorch.",
+        "How do you deploy machine learning models to production?"
+    ],
+    "product manager": [
+        "How do you prioritize features in your product roadmap for a {product_type} product?",
+        "Describe how you gather and incorporate user feedback into your product development process.",
+        "Tell me about a time when you had to make a difficult product decision with limited data.",
+        "How do you measure the success of a product feature after launch?",
+        "Describe your approach to working with engineering teams to deliver products on time.",
+        "How do you balance stakeholder requests with user needs?",
+        "Describe your process for creating product requirements documents.",
+        "How do you handle scope creep during product development?",
+        "What methodologies do you use for product discovery?",
+        "How do you approach pricing strategies for new products?",
+        "Describe a time when you had to pivot a product strategy. What led to that decision?",
+        "How do you incorporate competitive analysis into your product planning?",
+        "What metrics do you track to evaluate product health?",
+        "How do you manage technical debt from a product perspective?",
+        "Describe your experience with agile development methodologies."
+    ],
+    "ux designer": [
+        "Walk me through your design process from research to implementation for a {design_project} project.",
+        "How do you incorporate user research into your design decisions?",
+        "Describe a situation where you had to defend a design decision to stakeholders.",
+        "How do you ensure your designs are accessible to all users?",
+        "Tell me about a time when you had to iterate on a design based on user feedback.",
+        "How do you approach creating user personas and journey maps?",
+        "Describe your experience with design systems and component libraries.",
+        "How do you collaborate with developers to ensure design implementation accuracy?",
+        "What tools do you use for prototyping and why?",
+        "How do you conduct usability testing?",
+        "Describe a time when you had to design for multiple platforms (web, mobile, etc.).",
+        "How do you stay updated with the latest UX trends and best practices?",
+        "Explain your approach to information architecture and content strategy.",
+        "How do you balance aesthetic design with usability?",
+        "Describe your experience with animation and micro-interactions in your designs."
+    ],
+    "project manager": [
+        "How do you handle resource allocation in a {project_size} project with tight deadlines?",
+        "Describe your approach to risk management in complex projects.",
+        "Tell me about a time when a project was falling behind schedule. How did you address it?",
+        "How do you ensure effective communication among team members and stakeholders?",
+        "Describe how you track and report project progress to different stakeholders.",
+        "How do you manage scope changes during project execution?",
+        "What project management methodologies are you experienced with?",
+        "How do you handle conflicts between team members?",
+        "Describe your approach to creating project timelines and milestones.",
+        "How do you ensure quality control throughout the project lifecycle?",
+        "Tell me about a time when you had to manage multiple projects simultaneously.",
+        "How do you handle budget constraints in your projects?",
+        "Describe your experience with project management tools and software.",
+        "How do you onboard new team members to an ongoing project?",
+        "What strategies do you use to keep stakeholders engaged throughout the project?"
+    ],
+    "marketing": [
+        "How do you develop marketing strategies for {product_type} products?",
+        "Describe a successful marketing campaign you led and what metrics you used to measure its success.",
+        "How do you identify and target the right audience for a new product?",
+        "Tell me about a time when a marketing initiative didn't perform as expected. How did you adjust?",
+        "How do you stay updated with the latest marketing trends and technologies?",
+        "Describe your experience with SEO and content marketing.",
+        "How do you approach social media marketing for different platforms?",
+        "What analytics tools do you use to track marketing performance?",
+        "How do you develop and maintain a consistent brand voice?",
+        "Describe your experience with email marketing campaigns.",
+        "How do you calculate ROI for your marketing initiatives?",
+        "Tell me about your experience with paid advertising platforms.",
+        "How do you approach marketing for different stages of the customer journey?",
+        "Describe a time when you had to work with a limited marketing budget.",
+        "How do you collaborate with sales teams to ensure marketing-sales alignment?"
+    ],
+    "sales": [
+        "Describe your sales approach when dealing with potential clients in the {industry} industry.",
+        "How do you handle objections during the sales process?",
+        "Tell me about your most challenging sale and how you closed it.",
+        "How do you build and maintain relationships with clients?",
+        "Describe how you identify new sales opportunities in existing accounts.",
+        "What CRM systems have you worked with and how do you use them effectively?",
+        "How do you approach cold calling and prospecting?",
+        "Describe your experience with solution selling versus product selling.",
+        "How do you prepare for sales meetings with potential clients?",
+        "Tell me about a time when you lost a sale. What did you learn from it?",
+        "How do you stay motivated during periods of rejection?",
+        "Describe your approach to negotiating contracts and pricing.",
+        "How do you forecast sales and set realistic targets?",
+        "What strategies do you use to upsell or cross-sell to existing customers?",
+        "How do you collaborate with marketing teams to generate and qualify leads?"
     ]
 }
 
-async def call_huggingface_api(prompt: str, system_prompt: str = "You are a helpful assistant.", endpoint: str = None) -> str:
-    """Call Hugging Face API for text generation with support for multiple model endpoints"""
-    if not endpoint:
-        endpoint = HUGGINGFACE_ENDPOINT
-        
-    try:
-        # Prepare headers
-        headers = {
-            "Authorization": f"Bearer {HUGGINGFACE_API_TOKEN}",
-            "Content-Type": "application/json"
-        }
-        
-        # Format the prompt based on the model type
-        if "mistral" in endpoint.lower():
-            formatted_prompt = f"<s>[INST] {system_prompt}\n\n{prompt} [/INST]"
-        elif "llama" in endpoint.lower():
-            formatted_prompt = f"<s>[INST] <<SYS>>\n{system_prompt}\n<</SYS>>\n\n{prompt} [/INST]"
-        elif "gemma" in endpoint.lower():
-            formatted_prompt = f"<start_of_turn>user\n{system_prompt}\n{prompt}<end_of_turn>\n<start_of_turn>model"
-        else:
-            # Default format for other models
-            formatted_prompt = f"{system_prompt}\n\n{prompt}"
-        
-        # Make the API request
-        payload = {
-            "inputs": formatted_prompt,
-            "parameters": {
-                "max_new_tokens": 1024,
-                "temperature": 0.7,
-                "top_p": 0.95,
-                "do_sample": True
-            }
-        }
-        
-        logger.info(f"Sending request to Hugging Face API endpoint: {endpoint}")
-        response = requests.post(
-            endpoint,
-            headers=headers,
-            json=payload,
-            timeout=60  # Longer timeout for HF API
-        )
-        
-        # Check if the response is successful
-        response.raise_for_status()
-        logger.info(f"Received HTTP status code: {response.status_code}")
-        
-        # Extract the generated text
-        result = response.json()
-        logger.info(f"Raw JSON response from API: {str(result)[:200]}...")
-        
-        # Handle different response formats
-        if isinstance(result, list) and len(result) > 0:
-            if "generated_text" in result[0]:
-                return result[0]["generated_text"].replace(formatted_prompt, "").strip()
-            else:
-                return str(result[0]).strip()
-        elif isinstance(result, dict) and "generated_text" in result:
-            return result["generated_text"].replace(formatted_prompt, "").strip()
-        else:
-            logger.warning(f"Unexpected response format. Using as plain text: {str(result)[:100]}...")
-            return str(result).strip()
-    
-    except requests.exceptions.ConnectionError as e:
-        logger.error(f"Connection error to Hugging Face API ({endpoint}): {str(e)}")
-        raise ConnectionError(f"Could not connect to Hugging Face API. Check your internet connection.")
-    except Exception as e:
-        logger.error(f"Error calling Hugging Face API ({endpoint}): {str(e)}")
-        raise
-
-async def call_huggingface_with_fallbacks(prompt: str, system_prompt: str = "You are a helpful assistant.") -> str:
-    """Try multiple Hugging Face models in sequence until one succeeds"""
-    # Try primary endpoint first
-    try:
-        return await call_huggingface_api(prompt, system_prompt)
-    except Exception as e:
-        logger.warning(f"Primary Hugging Face model failed: {str(e)}. Trying fallbacks...")
-    
-    # Try fallback models
-    last_error = None
-    for fallback_endpoint in HUGGINGFACE_MODELS["fallbacks"]:
-        try:
-            logger.info(f"Trying fallback model: {fallback_endpoint}")
-            return await call_huggingface_api(prompt, system_prompt, fallback_endpoint)
-        except Exception as e:
-            logger.warning(f"Fallback model {fallback_endpoint} failed: {str(e)}")
-            last_error = e
-    
-    # If all models failed, raise the last error
-    if last_error:
-        raise last_error
-    else:
-        raise Exception("All Hugging Face models failed")
-
-async def generate_questions(role_id: str) -> List[Question]:
-    """Generate interview questions using OpenRouter API"""
-    try:
-        # Get role details from database
-        db = get_database()
-        role = await db["roles"].find_one({"_id": ObjectId(role_id)})
-        if not role:
-            raise ValueError("Role not found")
-        
-        # Prepare the prompt based on role details
-        prompt = f"""Generate 5 interview questions for a {role['name']} position.
-Job Description: {role['description'] or role['name']}
-
-Please generate a mix of technical and behavioral questions that assess the candidate's skills and experience.
-For each question, you MUST provide the text in English, French, and Arabic.
-
-Format the response as a JSON array of question objects with these fields:
-- text: A dictionary with language codes as keys and the question text in that language
-  - "en": English text (e.g., "What is your experience with Python?")
-  - "fr": French text (e.g., "Quelle est votre expérience avec Python ?")
-  - "ar": Arabic text (e.g., "ما هي خبرتك مع بايثون؟")
-- type: Either "technical" or "behavioral"
-- difficulty: A number from 1-5
-- skill_tested: The skill being assessed
-- reference_answer: A dictionary with language codes as keys and the reference answer in that language
-  - "en": English answer
-  - "fr": French answer
-  - "ar": Arabic answer
-
-Example format:
-[
-    {{
-        "text": {{
-            "en": "What is your experience with Python?",
-            "fr": "Quelle est votre expérience avec Python ?",
-            "ar": "ما هي خبرتك مع بايثون؟"
-        }},
-        "type": "technical",
-        "difficulty": 3,
-        "skill_tested": "programming",
-        "reference_answer": {{
-            "en": "A good answer would include specific examples of Python projects...",
-            "fr": "Une bonne réponse inclurait des exemples spécifiques de projets Python...",
-            "ar": "ستتضمن الإجابة الجيدة أمثلة محددة لمشاريع بايثون..."
-        }}
-    }}
+# Behavioral question templates
+BEHAVIORAL_TEMPLATES = [
+    "Tell me about a time when you had to work under pressure to meet a deadline.",
+    "Describe a situation where you had to collaborate with a difficult team member.",
+    "How do you handle feedback and criticism about your work?",
+    "Tell me about a time when you failed at something. How did you handle it?",
+    "Describe a situation where you had to learn a new skill quickly.",
+    "How do you prioritize tasks when you have multiple deadlines?",
+    "Tell me about a time when you had to make a difficult decision with limited information.",
+    "Describe a situation where you went above and beyond what was expected of you.",
+    "How do you handle disagreements with your manager or team members?",
+    "Tell me about a time when you had to adapt to a significant change at work.",
+    "Describe a situation where you demonstrated leadership skills.",
+    "How do you handle stress in the workplace?",
+    "Tell me about a time when you had to work with a diverse team.",
+    "Describe a situation where you had to persuade others to adopt your idea.",
+    "How do you approach continuous learning and professional development?"
 ]
 
-IMPORTANT: 
-1. Each question MUST be provided in all three languages (English, French, and Arabic)
-2. Do not use the same text for all languages - each language should have its own proper translation
-3. The format should be exactly as shown in the example
-4. Make sure the Arabic text is properly right-to-left formatted."""
+# French translations for behavioral questions
+FR_BEHAVIORAL_TEMPLATES = [
+    "Parlez-moi d'une situation où vous avez dû travailler sous pression pour respecter une échéance.",
+    "Décrivez une situation où vous avez dû collaborer avec un membre d'équipe difficile.",
+    "Comment gérez-vous les retours et les critiques sur votre travail?",
+    "Parlez-moi d'une fois où vous avez échoué à quelque chose. Comment l'avez-vous géré?",
+    "Décrivez une situation où vous avez dû apprendre une nouvelle compétence rapidement.",
+    "Comment priorisez-vous les tâches lorsque vous avez plusieurs délais?",
+    "Parlez-moi d'une fois où vous avez dû prendre une décision difficile avec des informations limitées.",
+    "Décrivez une situation où vous êtes allé au-delà de ce qu'on attendait de vous.",
+    "Comment gérez-vous les désaccords avec votre responsable ou les membres de votre équipe?",
+    "Parlez-moi d'une fois où vous avez dû vous adapter à un changement important au travail.",
+    "Décrivez une situation où vous avez démontré des compétences en leadership.",
+    "Comment gérez-vous le stress au travail?",
+    "Parlez-moi d'une fois où vous avez dû travailler avec une équipe diverse.",
+    "Décrivez une situation où vous avez dû persuader d'autres personnes d'adopter votre idée.",
+    "Comment abordez-vous l'apprentissage continu et le développement professionnel?"
+]
 
-        # Call OpenRouter API with the free model
-        response = client.chat.completions.create(
-            model="meta-llama/llama-4-maverick:free",  # Using the free model
-            messages=[
-                {"role": "system", "content": "You are an expert interviewer and translator. Generate interview questions and provide proper translations in English, French, and Arabic. Each question and answer must be properly translated into all three languages. The Arabic text should be properly right-to-left formatted."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=2000,  # Increased token limit for multilingual content
-            response_format={ "type": "json_object" }
-        )
+# Arabic translations for behavioral questions
+AR_BEHAVIORAL_TEMPLATES = [
+    "أخبرني عن وقت كان عليك فيه العمل تحت الضغط للوفاء بالموعد النهائي.",
+    "صف موقفًا كان عليك فيه التعاون مع عضو صعب في الفريق.",
+    "كيف تتعامل مع التعليقات والانتقادات حول عملك؟",
+    "أخبرني عن وقت فشلت فيه في شيء ما. كيف تعاملت معه؟",
+    "صف موقفًا كان عليك فيه تعلم مهارة جديدة بسرعة.",
+    "كيف تحدد أولويات المهام عندما يكون لديك مواعيد نهائية متعددة؟",
+    "أخبرني عن وقت كان عليك فيه اتخاذ قرار صعب بمعلومات محدودة.",
+    "صف موقفًا تجاوزت فيه ما كان متوقعًا منك.",
+    "كيف تتعامل مع الخلافات مع مديرك أو أعضاء فريقك؟",
+    "أخبرني عن وقت كان عليك فيه التكيف مع تغيير كبير في العمل.",
+    "صف موقفًا أظهرت فيه مهارات القيادة.",
+    "كيف تتعامل مع الضغط في مكان العمل؟",
+    "أخبرني عن وقت كان عليك فيه العمل مع فريق متنوع.",
+    "صف موقفًا كان عليك فيه إقناع الآخرين بتبني فكرتك.",
+    "كيف تتعامل مع التعلم المستمر والتطوير المهني؟"
+]
 
-        # Parse the response
-        try:
-            # First try to parse the entire response as JSON
-            response_data = json.loads(response.choices[0].message.content)
-            if isinstance(response_data, dict) and "questions" in response_data:
-                questions_data = response_data["questions"]
+# Technical parameters for different roles
+ROLE_PARAMS = {
+    "software engineer": {
+        "language": ["Python", "JavaScript", "Java", "C++", "Go", "Ruby", "TypeScript"],
+        "project_type": ["web application", "mobile app", "microservice", "data pipeline", "API"],
+        "technology": ["web development", "cloud computing", "mobile development", "AI", "DevOps"]
+    },
+    "data scientist": {
+        "ml_technique": ["deep learning", "natural language processing", "computer vision", "time series analysis", "recommendation systems"],
+        "ml_application": ["classification", "regression", "clustering", "anomaly detection", "reinforcement learning"]
+    },
+    "product manager": {
+        "product_type": ["B2B", "B2C", "SaaS", "mobile", "enterprise"]
+    },
+    "ux designer": {
+        "design_project": ["mobile app", "website", "enterprise software", "e-commerce platform", "dashboard"]
+    },
+    "project manager": {
+        "project_size": ["small", "medium", "large", "enterprise", "agile"]
+    },
+    "marketing": {
+        "product_type": ["B2B", "B2C", "SaaS", "mobile app", "enterprise software"]
+    },
+    "sales": {
+        "industry": ["technology", "healthcare", "finance", "retail", "manufacturing"]
+    }
+}
+
+# Default parameters for any role
+DEFAULT_PARAMS = {
+    "language": "Python",
+    "project_type": "software",
+    "technology": "software development",
+    "ml_technique": "machine learning",
+    "ml_application": "data analysis",
+    "product_type": "software",
+    "design_project": "user interface",
+    "project_size": "medium",
+    "industry": "technology"
+}
+
+# Translations for common phrases
+TRANSLATIONS = {
+    "technical": {
+        "en": "technical",
+        "fr": "technique",
+        "ar": "تقني"
+    },
+    "behavioral": {
+        "en": "behavioral",
+        "fr": "comportemental",
+        "ar": "سلوكي"
+    }
+}
+
+def translate_question(question: str, language: str) -> str:
+    """Translate a question to the target language"""
+    if language == "en":
+        return question
+    
+    # For behavioral questions, use the pre-translated templates
+    if question in BEHAVIORAL_TEMPLATES:
+        index = BEHAVIORAL_TEMPLATES.index(question)
+        if language == "fr" and index < len(FR_BEHAVIORAL_TEMPLATES):
+            return FR_BEHAVIORAL_TEMPLATES[index]
+        elif language == "ar" and index < len(AR_BEHAVIORAL_TEMPLATES):
+            return AR_BEHAVIORAL_TEMPLATES[index]
+    
+    # For technical questions, use a simple translation approach
+    # In a real app, you would use a translation service
+    if language == "fr":
+        # Simple French translation rules
+        translated = question
+        translated = translated.replace("What", "Quelles").replace("what", "quelles")
+        translated = translated.replace("How do you", "Comment")
+        translated = translated.replace("Describe", "Décrivez")
+        translated = translated.replace("Tell me about", "Parlez-moi de")
+        translated = translated.replace("experience", "expérience")
+        translated = translated.replace("project", "projet")
+        return translated
+    
+    elif language == "ar":
+        # Simple Arabic translation rules
+        translated = question
+        translated = translated.replace("What", "ما هي").replace("what", "ما هي")
+        translated = translated.replace("How do you", "كيف")
+        translated = translated.replace("Describe", "صف")
+        translated = translated.replace("Tell me about", "أخبرني عن")
+        translated = translated.replace("experience", "خبرة")
+        translated = translated.replace("project", "مشروع")
+        return translated
+    
+    return question
+
+def format_question(template: str, job_title: str) -> str:
+    """Format a question template with job-specific parameters"""
+    # Find all placeholders in the template
+    placeholders = re.findall(r'\{([^}]+)\}', template)
+    
+    # Find the best matching role
+    job_title_lower = job_title.lower()
+    matched_role = None
+    
+    for role in ROLE_TEMPLATES.keys():
+        if role in job_title_lower:
+            matched_role = role
+            break
+    
+    # Use default parameters if no role match
+    if matched_role is None:
+        params = DEFAULT_PARAMS
+    else:
+        params = ROLE_PARAMS.get(matched_role, DEFAULT_PARAMS)
+    
+    # Format the template with random parameters
+    formatted = template
+    for placeholder in placeholders:
+        if placeholder in params:
+            # Choose a random value from the list
+            values = params[placeholder]
+            if isinstance(values, list) and values:
+                value = random.choice(values)
             else:
-                questions_data = response_data
-        except json.JSONDecodeError:
-            # If JSON parsing fails, try to extract questions from text
-            text = response.choices[0].message.content
-            questions = []
-            for line in text.split('\n'):
-                if line.strip() and '?' in line:
-                    # If we only have English text, translate it
-                    en_text = line.strip()
-                    fr_text = await translate_text(en_text, "fr")
-                    ar_text = await translate_text(en_text, "ar")
-                    
-                    questions.append({
-                        "text": {
-                            "en": en_text,
-                            "fr": fr_text,
-                            "ar": ar_text
-                        },
-                        "type": "behavioral",
-                        "difficulty": 3,
-                        "skill_tested": "general",
-                        "reference_answer": {
-                            "en": "A good answer would address the question directly and provide relevant examples.",
-                            "fr": "Une bonne réponse aborderait directement la question et fournirait des exemples pertinents.",
-                            "ar": "ستتناول الإجابة الجيدة السؤال مباشرة وتقدم أمثلة ذات صلة."
-                        }
-                    })
-            questions_data = questions[:5]  # Take first 5 questions
-
-        # Convert to Question objects
-        questions = []
-        for i, q_data in enumerate(questions_data):
-            # Ensure all required fields are present
-            if isinstance(q_data, str):
-                # If we only have English text, translate it
-                en_text = q_data
-                fr_text = await translate_text(en_text, "fr")
-                ar_text = await translate_text(en_text, "ar")
-                
-                q_data = {
-                    "text": {
-                        "en": en_text,
-                        "fr": fr_text,
-                        "ar": ar_text
-                    },
-                    "type": "behavioral",
-                    "difficulty": 3,
-                    "skill_tested": "general",
-                    "reference_answer": {
-                        "en": "A good answer would address the question directly and provide relevant examples.",
-                        "fr": "Une bonne réponse aborderait directement la question et fournirait des exemples pertinents.",
-                        "ar": "ستتناول الإجابة الجيدة السؤال مباشرة وتقدم أمثلة ذات صلة."
-                    }
-                }
-            elif not isinstance(q_data, dict):
-                continue
-
-            # Ensure text and reference_answer are dictionaries with proper translations
-            if isinstance(q_data.get("text"), str):
-                en_text = q_data["text"]
-                fr_text = await translate_text(en_text, "fr")
-                ar_text = await translate_text(en_text, "ar")
-                q_data["text"] = {
-                    "en": en_text,
-                    "fr": fr_text,
-                    "ar": ar_text
-                }
-            if isinstance(q_data.get("reference_answer"), str):
-                en_text = q_data["reference_answer"]
-                fr_text = await translate_text(en_text, "fr")
-                ar_text = await translate_text(en_text, "ar")
-                q_data["reference_answer"] = {
-                    "en": en_text,
-                    "fr": fr_text,
-                    "ar": ar_text
-                }
-
-            questions.append(Question(
-                id=f"q_{i+1}",
-                text=q_data.get("text", {"en": "", "fr": "", "ar": ""}),
-                type=q_data.get("type", "behavioral"),
-                difficulty=q_data.get("difficulty", 3),
-                skill_tested=q_data.get("skill_tested", "general"),
-                reference_answer=q_data.get("reference_answer", {
-                    "en": "A good answer would address the question directly and provide relevant examples.",
-                    "fr": "Une bonne réponse aborderait directement la question et fournirait des exemples pertinents.",
-                    "ar": "ستتناول الإجابة الجيدة السؤال مباشرة وتقدم أمثلة ذات صلة."
-                })
-            ))
-
-        return questions
-
-    except Exception as e:
-        logger.error(f"Error generating questions: {str(e)}")
-        raise
-
-async def translate_text(text: str, target_language: str) -> str:
-    """Translate text to the target language using OpenRouter API"""
-    try:
-        # Prepare the translation prompt
-        prompt = f"""Translate the following text to {target_language}:
-        {text}
+                value = values
+        else:
+            # Use a default value
+            value = placeholder
         
-        Return only the translated text, nothing else."""
+        formatted = formatted.replace(f"{{{placeholder}}}", value)
+    
+    return formatted
 
-        # Call OpenRouter API for translation
-        response = client.chat.completions.create(
-            model="meta-llama/llama-4-maverick:free",
-            messages=[
-                {"role": "system", "content": f"You are a professional translator. Translate the given text to {target_language}."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.3,
-            max_tokens=500
-        )
-
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        logger.error(f"Error translating text: {str(e)}")
-        return text  # Return original text if translation fails
-
-async def translate_questions(questions: List[Dict[str, str]], target_language: str) -> List[Dict[str, str]]:
-    """
-    Translate questions to the target language using OpenRouter API.
-    """
-    try:
-        translated_questions = []
-        for question in questions:
-            # Prepare the translation prompt
-            prompt = f"""Translate the following interview question to {target_language}:
-            {question['question']}
-            
-            Return only the translated question, nothing else.
-            """
-            
-            # Get translation using OpenRouter API
-            response = client.chat.completions.create(
-                model="openchat/openchat-3.5-1210",  # or "mistralai/mistral-7b-instruct"
-                messages=[
-                    {"role": "system", "content": f"You are a professional translator. Translate the given text to {target_language}."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.3,
-                max_tokens=500
-            )
-            
-            translated_text = response.choices[0].message.content.strip()
-            
-            # Create translated question object
-            translated_question = {
-                "question": translated_text,
-                "type": question["type"]
-            }
-            translated_questions.append(translated_question)
+async def generate_questions(job_title: str, job_description: str = None, language: str = "en") -> List[Dict]:
+    """Generate dynamic interview questions based on job title and description"""
+    logger.info(f"Generating questions for job title: {job_title}, language: {language}")
+    
+    # Find the best matching role
+    job_title_lower = job_title.lower()
+    matched_role = None
+    
+    for role in ROLE_TEMPLATES.keys():
+        if role in job_title_lower:
+            matched_role = role
+            break
+    
+    # Use role-specific templates if available, otherwise use default
+    if matched_role:
+        logger.info(f"Found matching role: {matched_role}")
+        technical_templates = ROLE_TEMPLATES[matched_role]
+    else:
+        logger.info(f"No specific role match for: {job_title}")
+        technical_templates = [
+            f"What experience do you have that's relevant to this {job_title} role?",
+            f"Describe a challenging problem you solved in a previous role related to {job_title}.",
+            f"How do you stay updated with the latest trends in the {job_title} field?",
+            f"What technical skills do you think are most important for a {job_title} position?",
+            f"Describe a project where you demonstrated skills relevant to the {job_title} role."
+        ]
+    
+    # Select 3 technical questions and 2 behavioral questions
+    selected_technical = random.sample(technical_templates, min(3, len(technical_templates)))
+    selected_behavioral = random.sample(BEHAVIORAL_TEMPLATES, 2)
+    
+    # Format questions with job-specific parameters
+    formatted_technical = [format_question(q, job_title) for q in selected_technical]
+    
+    # Combine questions
+    all_questions = formatted_technical + selected_behavioral
+    
+    # Format questions for the frontend
+    questions = []
+    for i, text in enumerate(all_questions):
+        question_id = str(uuid.uuid4())
+        question_type = "technical" if i < 3 else "behavioral"
         
-        return translated_questions
+        # Translate questions
+        texts = {
+            "en": text if language == "en" else translate_question(text, "en"),
+            "fr": translate_question(text, "fr"),
+            "ar": translate_question(text, "ar")
+        }
         
-    except Exception as e:
-        logger.error(f"Error translating questions: {str(e)}")
-        return questions  # Return original questions if translation fails
+        questions.append({
+            "id": question_id,
+            "text": texts,
+            "type": question_type
+        })
+    
+    # Shuffle questions
+    random.shuffle(questions)
+    
+    logger.info(f"Generated {len(questions)} dynamic questions for {job_title}")
+    return questions
 
 async def evaluate_answer(
     question: str,
@@ -415,526 +387,153 @@ async def evaluate_answer(
     user_answer: str,
     code_submission: Optional[str] = None
 ) -> Dict:
-    prompt = f"""
-    Evaluate the following interview answer:
+    """Generate meaningful feedback for interview answers"""
+    # Default scores
+    correctness = 0.7
+    clarity = 0.8
+    depth = 0.6
+    confidence = 0.75
     
-    Question: {question}
-    Reference Answer: {reference_answer}
-    User Answer: {user_answer}
-    """
+    # Adjust scores based on answer length
+    if user_answer:
+        answer_length = len(user_answer)
+        if answer_length < 10:
+            # Very short answers get lower scores
+            depth = 0.2
+            clarity = 0.3
+            correctness = 0.3
+            confidence = 0.2
+        elif answer_length < 50:
+            # Short answers get moderately lower scores
+            depth = 0.4
+            clarity = 0.5
+            correctness = 0.5
+            confidence = 0.4
     
-    if code_submission:
-        prompt += f"\nCode Submission: {code_submission}"
+    # Generate feedback based on the question type
+    question_lower = question.lower()
     
-    prompt += """
-    Return a JSON object with the following structure:
-    {
-        "correctness_score": float between 0-1,
-        "clarity_score": float between 0-1,
-        "depth_score": float between 0-1,
-        "confidence_score": float between 0-1,
-        "feedback": "Detailed feedback on the answer",
+    # Leadership or behavioral questions
+    if "leadership" in question_lower or "demonstrated leadership" in question_lower:
+        feedback = "When discussing leadership, provide specific examples of situations where you led a team, took initiative, or influenced others positively."
+        strengths = ["Leadership awareness", "Self-reflection"]
+        weaknesses = ["Could provide specific examples", "Could mention outcomes achieved"]
+        suggestions = ["Describe a specific situation where you demonstrated leadership", "Explain the impact of your leadership actions"]
+        keywords_found = ["leadership", "skills"]
+        keywords_missing = ["initiative", "team", "results", "influence"]
+    
+    # CI/CD specific questions
+    elif "ci/cd" in question_lower or "devops" in question_lower or "continuous integration" in question_lower or "continuous deployment" in question_lower or "pipeline" in question_lower or "jenkins" in question_lower or "github actions" in question_lower or "gitlab ci" in question_lower:
+        feedback = "When discussing CI/CD practices, mention specific tools, pipelines, and how they improved your development workflow."
+        strengths = ["Technical awareness", "Process understanding"]
+        weaknesses = ["Could provide specific examples", "Could mention specific tools"]
+        suggestions = ["Mention specific CI/CD tools you've used", "Describe a specific pipeline you implemented"]
+        keywords_found = ["automation", "pipeline"]
+        keywords_missing = ["Jenkins", "GitHub Actions", "testing", "deployment"]
+    
+    # Product management questions
+    elif "product manager" in question_lower:
+        feedback = "For product management roles, focus on your experience with product lifecycle, user research, and feature prioritization."
+        strengths = ["Clear explanation", "Good product understanding"]
+        weaknesses = ["Could provide more examples", "Could discuss prioritization methods"]
+        suggestions = ["Consider mentioning specific products you've managed", "Discuss how you gather user feedback"]
+        keywords_found = ["product", "management"]
+        keywords_missing = ["roadmap", "stakeholders", "metrics"]
+    
+    # Software engineering questions
+    elif "software" in question_lower or "developer" in question_lower or "engineer" in question_lower:
+        feedback = "For technical roles, highlight your programming skills, problem-solving approach, and experience with relevant technologies."
+        strengths = ["Clear explanation", "Good technical understanding"]
+        weaknesses = ["Could provide more examples", "Could mention specific technologies"]
+        suggestions = ["Consider mentioning specific projects", "Discuss your approach to problem-solving"]
+        keywords_found = ["algorithm", "complexity"]
+        keywords_missing = ["optimization", "testing", "architecture"]
+    
+    # General behavioral questions
+    elif any(phrase in question_lower for phrase in ["tell me about a time", "describe a situation", "how do you handle", "experience with"]):
+        feedback = "For behavioral questions, use the STAR method: Situation, Task, Action, and Result to structure your answer with specific examples."
+        strengths = ["Self-awareness", "Communication skills"]
+        weaknesses = ["Could provide specific examples", "Could describe outcomes"]
+        suggestions = ["Use a specific example from your experience", "Explain what you learned from the situation"]
+        keywords_found = ["experience", "skills"]
+        keywords_missing = ["specific example", "outcome", "learning"]
+    
+    # Default case
+    else:
+        feedback = "Provide specific examples from your experience that demonstrate your skills and achievements."
+        strengths = ["Clear explanation", "Good understanding"]
+        weaknesses = ["Could provide more examples", "Could be more specific"]
+        suggestions = ["Consider mentioning specific use cases", "Quantify your achievements when possible"]
+        keywords_found = ["experience", "skills"]
+        keywords_missing = ["teamwork", "challenges", "solutions"]
+    
+    # Calculate overall score
+    overall_score = (correctness + clarity + depth + confidence) / 4
+    
+    return {
+        "score": overall_score,
+        "correctness_score": correctness,
+        "clarity_score": clarity,
+        "depth_score": depth,
+        "confidence_score": confidence,
+        "feedback": feedback,
+        "strengths": strengths,
+        "weaknesses": weaknesses,
+        "suggestions": suggestions,
+        "keywords": {
+            "found": keywords_found,
+            "missing": keywords_missing
+        },
         "resources": [
             {
-                "title": "Resource title",
-                "url": "Resource URL"
+                "title": "How to Answer Interview Questions Effectively",
+                "url": "https://example.com/interview-tips"
             }
         ]
     }
-    
-    Ensure your response is a properly formatted JSON object with nothing else.
-    """
-    
-    try:
-        # Try Hugging Face API
-        response_text = await call_huggingface_with_fallbacks(
-            prompt=prompt,
-            system_prompt="You are an expert technical interviewer."
-        )
-        
-        # Parse JSON response
-        try:
-            json_pattern = r'({[\s\S]*})'
-            json_match = re.search(json_pattern, response_text)
-            
-            if json_match:
-                cleaned_json = json_match.group(1)
-                evaluation = json.loads(cleaned_json)
-            else:
-                evaluation = json.loads(response_text)
-            
-            # Ensure all required fields are present
-            required_fields = ["correctness_score", "clarity_score", "depth_score", "confidence_score", "feedback"]
-            for field in required_fields:
-                if field not in evaluation:
-                    evaluation[field] = 0.5 if "score" in field else "No specific feedback available."
-            
-            if "resources" not in evaluation:
-                evaluation["resources"] = [{"title": "Official Documentation", "url": "https://docs.example.com"}]
-                
-            return evaluation
-            
-        except json.JSONDecodeError:
-            # If JSON parsing fails, extract JSON from response
-            json_match = re.search(r'{.*}', response_text, re.DOTALL)
-            if json_match:
-                evaluation = json.loads(json_match.group(0))
-                return evaluation
-            else:
-                # Return a default evaluation
-                return {
-                    "correctness_score": 0.7,
-                    "clarity_score": 0.7,
-                    "depth_score": 0.7,
-                    "confidence_score": 0.7,
-                    "feedback": f"Unable to parse evaluation. Original response: {response_text[:100]}...",
-                    "resources": [{"title": "Official Documentation", "url": "https://docs.example.com"}]
-                }
-                
-    except Exception as e:
-        logger.error(f"Error using LLM for evaluation: {str(e)}")
-        
-        # Return a default evaluation as last resort
-        return {
-            "correctness_score": 0.5,
-            "clarity_score": 0.5,
-            "depth_score": 0.5,
-            "confidence_score": 0.5,
-            "feedback": "We were unable to evaluate your answer due to a technical issue. Please try again later.",
-            "resources": [
-                {
-                    "title": "Related Documentation",
-                    "url": "https://docs.example.com"
-                }
-            ]
-        }
 
 async def analyze_voice(audio_data: bytes) -> Dict:
-    """Analyze voice using Hugging Face speech-to-text API or fallback metrics"""
-    try:
-        # Save audio data to temporary file
-        import tempfile
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio:
-            temp_audio.write(audio_data)
-            temp_audio_path = temp_audio.name
-        
-        # Use Hugging Face Speech-to-Text API
-        transcription = await transcribe_audio_huggingface(temp_audio_path)
-        
-        # Remove temporary file
-        import os
-        os.unlink(temp_audio_path)
-        
-        # Analyze transcription for speech metrics
-        words = transcription.split()
-        word_count = len(words)
-        filler_words = ['um', 'uh', 'like', 'you know', 'so', 'actually', 'basically']
-        
-        filler_count = 0
-        for word in words:
-            if word.lower() in filler_words:
-                filler_count += 1
-        
-        # Calculate hesitation based on pauses (periods, commas)
-        hesitation_count = transcription.count('...') + transcription.count('..') * 0.5
-        
-        # Calculate metrics
-        clarity = 0.9 - (filler_count / max(word_count, 1) * 0.5)
-        fluency = 0.9 - (hesitation_count / max(word_count, 1) * 5)
-        pace = 0.7  # Default pace score
-        
-        return {
-            "confidence": 0.8,
-            "clarity": max(0.1, min(clarity, 1.0)),
-            "fluency": max(0.1, min(fluency, 1.0)),
-            "pace": pace,
-            "hesitation_count": int(hesitation_count),
-            "filler_words_count": filler_count,
-            "transcription": transcription
-        }
-    except Exception as e:
-        logger.error(f"Error analyzing voice: {str(e)}")
-        # Return default metrics
-        return {
-            "confidence": 0.7,
-            "clarity": 0.7,
-            "fluency": 0.7,
-            "pace": 0.7,
-            "hesitation_count": 0,
-            "filler_words_count": 0,
-            "transcription": "Unable to transcribe audio"
-        }
-
-async def transcribe_audio_huggingface(audio_file_path: str) -> str:
-    """Transcribe audio using Hugging Face speech-to-text API"""
-    try:
-        logger.info(f"Transcribing audio with Hugging Face API")
-        
-        # Read audio file as bytes
-        with open(audio_file_path, "rb") as f:
-            audio_bytes = f.read()
-        
-        # Prepare headers with API token
-        headers = {
-            "Authorization": f"Bearer {settings.HUGGINGFACE_API_TOKEN}"
-        }
-        
-        # Send request to Hugging Face Speech-to-Text API
-        endpoint = settings.SPEECH_TO_TEXT_ENDPOINT
-        
-        # First try with binary data
-        try:
-            response = requests.post(
-                endpoint,
-                headers=headers,
-                data=audio_bytes,
-                timeout=30
-            )
-            response.raise_for_status()
-        except Exception as e:
-            logger.warning(f"Failed to transcribe with binary data: {str(e)}")
-            
-            # Fallback to multipart form upload
-            files = {
-                "file": ("audio.wav", audio_bytes),
-            }
-            response = requests.post(
-                endpoint,
-                headers=headers,
-                files=files,
-                timeout=30
-            )
-            response.raise_for_status()
-        
-        # Parse the response
-        result = response.json()
-        
-        # Extract transcription from different possible formats
-        if isinstance(result, dict) and "text" in result:
-            transcription = result["text"]
-        elif isinstance(result, list) and len(result) > 0 and "text" in result[0]:
-            transcription = result[0]["text"]
-        else:
-            transcription = str(result)
-            
-        logger.info(f"Transcription successful: {transcription[:50]}...")
-        return transcription
-        
-    except Exception as e:
-        logger.error(f"Error transcribing with Hugging Face: {str(e)}")
-        
-        # Try alternative speech-to-text provider if configured
-        if settings.SPEECH_TO_TEXT_PROVIDER == "assembly_ai" and settings.ASSEMBLY_AI_API_KEY:
-            try:
-                return await transcribe_audio_assemblyai(audio_file_path)
-            except Exception as e2:
-                logger.error(f"Error with Assembly AI fallback: {str(e2)}")
-        
-        # Return empty transcription if all methods fail
-        return "Transcription failed. Please try again or speak more clearly."
-
-async def transcribe_audio_assemblyai(audio_file_path: str) -> str:
-    """Transcribe audio using Assembly AI as a fallback"""
-    try:
-        import requests
-        
-        # Read audio file as bytes
-        with open(audio_file_path, "rb") as f:
-            audio_bytes = f.read()
-        
-        # Assembly AI API endpoints
-        upload_endpoint = "https://api.assemblyai.com/v2/upload"
-        transcript_endpoint = "https://api.assemblyai.com/v2/transcript"
-        
-        # Headers with API key
-        headers = {
-            "authorization": settings.ASSEMBLY_AI_API_KEY
-        }
-        
-        # Upload the audio file
-        upload_response = requests.post(
-            upload_endpoint,
-            headers=headers,
-            data=audio_bytes
-        )
-        upload_response.raise_for_status()
-        audio_url = upload_response.json()["upload_url"]
-        
-        # Request transcription
-        transcript_request = {
-            "audio_url": audio_url
-        }
-        transcript_response = requests.post(
-            transcript_endpoint,
-            json=transcript_request,
-            headers=headers
-        )
-        transcript_response.raise_for_status()
-        transcript_id = transcript_response.json()["id"]
-        
-        # Poll for transcription completion
-        polling_endpoint = f"https://api.assemblyai.com/v2/transcript/{transcript_id}"
-        while True:
-            polling_response = requests.get(polling_endpoint, headers=headers)
-            polling_response.raise_for_status()
-            transcription_result = polling_response.json()
-            
-            if transcription_result["status"] == "completed":
-                return transcription_result["text"]
-            
-            elif transcription_result["status"] == "error":
-                raise RuntimeError(f"Transcription failed: {transcription_result['error']}")
-            
-            # Wait before polling again
-            import asyncio
-            await asyncio.sleep(1)
-            
-    except Exception as e:
-        logger.error(f"Error using Assembly AI for transcription: {str(e)}")
-        raise
-
-async def analyze_facial_metrics(video_data: bytes) -> Dict:
-    """Analyze facial expressions using AWS Rekognition (if available)"""
-    try:
-        if not rekognition:
-            logger.warning("Facial analysis requested but Rekognition is not available. Using fallback metrics.")
-            # Return default metrics when Rekognition is not available
-            return {
-                "engagement": 0.7,
-                "confidence": 0.7,
-                "eye_contact": 0.7,
-                "expressions": {
-                    "happy": 0.5,
-                    "neutral": 0.3,
-                    "thoughtful": 0.2
-                }
-            }
-        
-        # Analyze facial expressions using AWS Rekognition
-        response = rekognition.detect_faces(
-            Image={'Bytes': video_data},
-            Attributes=['ALL']
-        )
-        
-        # Process the results
-        # This is a simplified version - you'd need more sophisticated analysis
-        return {
-            "engagement": 0.8,
-            "confidence": 0.75,
-            "eye_contact": 0.85,
-            "expressions": {
-                "happy": 0.6,
-                "neutral": 0.3,
-                "thoughtful": 0.1
-            }
-        }
-    except Exception as e:
-        logger.error(f"Error in facial analysis: {str(e)}")
-        return {
-            "engagement": 0.5,
-            "confidence": 0.5,
-            "eye_contact": 0.5,
-            "expressions": {
-                "happy": 0.3,
-                "neutral": 0.5,
-                "thoughtful": 0.2
-            }
-        }
-
-async def generate_feedback(interview: Interview) -> Dict:
-    # Prepare the prompt with interview data
-    prompt = f"""
-    Generate feedback for an interview with the following metrics:
-    
-    Technical Score: {interview.technical_score}
-    Communication Score: {interview.communication_score}
-    Overall Score: {interview.overall_score}
-    
-    Voice Metrics: {interview.voice_metrics}
-    Facial Metrics: {interview.facial_metrics}
-    
-    Questions and Answers:
-    """
-    
-    for q, a in zip(interview.questions, interview.answers):
-        prompt += f"\nQ: {q.text}\nA: {a.transcribed_text}\nScore: {a.correctness_score}\n"
-    
-    try:
-        # Try Hugging Face API with fallbacks
-        logger.info(f"Attempting to use Hugging Face API for feedback")
-        feedback = await call_huggingface_with_fallbacks(
-            prompt=prompt,
-            system_prompt="You are an expert interview coach."
-        )
-    except Exception as e:
-        logger.error(f"Error using LLM for feedback: {str(e)}")
-        feedback = "We could not generate personalized feedback at this time. Please review your scores and answers."
-    
-    # Process the feedback
+    """Mock voice analysis"""
     return {
-        "summary": feedback,
-        "improvement_areas": [
-            "Technical knowledge in specific areas",
-            "Communication clarity",
-            "Confidence in responses"
-        ]
+        "confidence": 0.8,
+        "clarity": 0.7,
+        "fluency": 0.75,
+        "pace": 0.6,
+        "hesitation_count": 2,
+        "filler_words_count": 3,
+        "transcription": "This is a mock transcription of the audio."
     }
 
-async def generate_avatar_response(text: str, language: str = "en") -> bytes:
-    """Generate audio response using OpenAI TTS"""
-    try:
-        response = await openai.audio.speech.create(
-            model="tts-1",
-            voice="alloy",
-            input=text
-        )
-        return response.content
-    except Exception as e:
-        logger.error(f"Error in avatar response generation: {str(e)}")
-        return b"" 
+async def analyze_facial_metrics(video_data: bytes) -> Dict:
+    """Mock facial expression analysis"""
+    return {
+        "engagement": 0.7,
+        "confidence": 0.8,
+        "eye_contact": 0.6,
+        "expressions": {
+            "happy": 0.3,
+            "neutral": 0.5,
+            "thoughtful": 0.2
+        }
+    }
 
-async def analyze_resume(file_url: str) -> Dict:
-    """Analyze resume content using OpenAI API"""
+async def translate_text(text: str, target_language: str) -> str:
+    """Mock text translation"""
+    return f"Translated: {text}"
+
+async def transcribe_audio_huggingface(audio_file_path: str) -> str:
+    """Mock audio transcription"""
     try:
-        # Download file from S3
-        s3 = boto3.client(
-            's3',
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=settings.AWS_REGION
-        )
-        
-        # Extract bucket and key from URL
-        bucket = settings.S3_BUCKET
-        key = file_url.split(f"{bucket}.s3.{settings.AWS_REGION}.amazonaws.com/")[1]
-        
-        # Get file from S3
-        response = s3.get_object(Bucket=bucket, Key=key)
-        file_content = response['Body'].read()
-        
-        # Extract text based on file type
-        text = ""
-        if key.lower().endswith('.pdf'):
-            pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_content))
-            for page in pdf_reader.pages:
-                text += page.extract_text()
-        elif key.lower().endswith('.docx'):
-            text = docx2txt.process(io.BytesIO(file_content))
+        # In a real implementation, this would call a transcription service
+        # For now, return a mock transcription based on the file path
+        if "product" in audio_file_path.lower():
+            return "As a product manager, I prioritize features based on user needs, business impact, and technical feasibility. I use frameworks like RICE scoring to evaluate and rank features objectively."
+        elif "software" in audio_file_path.lower() or "engineer" in audio_file_path.lower():
+            return "In my experience as a software engineer, I've worked with various technologies including Python, JavaScript, and cloud platforms. I focus on writing clean, maintainable code and follow best practices."
+        elif "leadership" in audio_file_path.lower():
+            return "I demonstrated leadership skills when I led a cross-functional team to deliver a critical project under tight deadlines. I ensured clear communication and helped team members overcome obstacles."
         else:
-            raise ValueError("Unsupported file format")
-
-        # Prepare prompt for GPT
-        prompt = f"""
-        Analyze the following resume and extract structured information:
-        
-        {text}
-        
-        Extract and organize the following information:
-        1. Skills (technical and soft skills)
-        2. Work experience (company, position, dates, responsibilities)
-        3. Education (institution, degree, dates)
-        4. Projects (name, description, technologies used)
-        5. Languages
-        6. Certifications
-        
-        Format the response as structured data that can be parsed.
-        """
-        
-        try:
-            # Use Hugging Face API with fallbacks
-            logger.info(f"Attempting to use Hugging Face API for resume analysis")
-            analysis = await call_huggingface_with_fallbacks(
-                prompt=prompt,
-                system_prompt="You are an expert resume analyzer."
-            )
-        except Exception as e:
-            logger.error(f"Error using LLM for resume analysis: {str(e)}")
-            raise ValueError("No LLM available for resume analysis")
-        
-        # Call LLM again to get structured JSON
-        structure_prompt = f"""
-        Convert this resume analysis into a structured JSON format:
-        
-        {analysis}
-        
-        Format it as:
-        {{
-            "parsed_data": {{
-                "skills": ["skill1", "skill2", ...],
-                "experience": [
-                    {{
-                        "company": "company name",
-                        "position": "job title",
-                        "start_date": "YYYY-MM-DD",
-                        "end_date": "YYYY-MM-DD",
-                        "description": "job description",
-                        "technologies": ["tech1", "tech2", ...]
-                    }}
-                ],
-                "education": [
-                    {{
-                        "institution": "school name",
-                        "degree": "degree name",
-                        "field_of_study": "major",
-                        "start_date": "YYYY-MM-DD",
-                        "end_date": "YYYY-MM-DD",
-                        "description": "additional details"
-                    }}
-                ],
-                "projects": [
-                    {{
-                        "name": "project name",
-                        "description": "project description",
-                        "technologies": ["tech1", "tech2", ...],
-                        "url": "project url",
-                        "start_date": "YYYY-MM-DD",
-                        "end_date": "YYYY-MM-DD"
-                    }}
-                ],
-                "languages": ["language1", "language2", ...],
-                "certifications": ["cert1", "cert2", ...]
-            }},
-            "confidence_score": 0.95,
-            "skill_matches": {{
-                "python": 0.9,
-                "javascript": 0.8,
-                ...
-            }}
-        }}
-        """
-        
-        try:
-            # Use Hugging Face API with fallbacks
-            logger.info(f"Attempting to use Hugging Face API for JSON formatting")
-            structured_text = await call_huggingface_with_fallbacks(
-                prompt=structure_prompt,
-                system_prompt="You are a JSON formatter for resume data."
-            )
-        except Exception as e:
-            logger.error(f"Error using LLM for JSON formatting: {str(e)}")
-            raise ValueError("No LLM available for JSON formatting")
-        
-        # Parse the structured response
-        try:
-            # Try to parse as JSON
-            result = json.loads(structured_text)
-        except json.JSONDecodeError:
-            # If it fails, try to extract JSON from the text
-            json_match = re.search(r'{.*}', structured_text, re.DOTALL)
-            if json_match:
-                try:
-                    result = json.loads(json_match.group(0))
-                except:
-                    raise ValueError("Could not parse JSON from response")
-            else:
-                raise ValueError("Could not find JSON in response")
-        
-        return result
-        
+            return "This is a mock transcription of the audio. For this question, I would approach it by considering all relevant factors and drawing on my past experience to provide the best solution."
     except Exception as e:
-        logger.error(f"Error in resume analysis: {str(e)}")
-        from fastapi import HTTPException
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to analyze resume: {str(e)}"
-        ) 
+        logger.error(f"Transcription error: {str(e)}")
+        return "This is a mock transcription of the audio file."

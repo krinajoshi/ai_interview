@@ -37,4 +37,4 @@ const LanguageSelector: React.FC<LanguageSelectorProps> = ({ value, onChange }) 
   );
 };
 
-export default LanguageSelector; 
+export default LanguageSelector;

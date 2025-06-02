@@ -1,7 +1,6 @@
 from datetime import datetime
-from typing import Optional, List, Any, ClassVar, Dict
-from pydantic import BaseModel, EmailStr, Field, ConfigDict, GetJsonSchemaHandler
-from pydantic.json_schema import JsonSchemaValue
+from typing import Optional, List, Any
+from pydantic import BaseModel, EmailStr, Field
 from bson import ObjectId
 
 class PyObjectId(ObjectId):
@@ -10,14 +9,14 @@ class PyObjectId(ObjectId):
         yield cls.validate
 
     @classmethod
-    def validate(cls, v, handler):
-        if not ObjectId.is_valid(v):
+    def validate(cls, value, **kwargs):
+        if not ObjectId.is_valid(value):
             raise ValueError("Invalid ObjectId")
-        return ObjectId(v)
+        return ObjectId(value)
 
     @classmethod
-    def __get_pydantic_json_schema__(cls, core_schema: Any, handler: GetJsonSchemaHandler) -> JsonSchemaValue:
-        return {"type": "string"}
+    def __modify_schema__(cls, field_schema):
+        field_schema.update(type="string")
 
 class UserBase(BaseModel):
     email: EmailStr
@@ -36,11 +35,9 @@ class UserInDB(UserBase):
     is_active: bool = True
     is_superuser: bool = False
 
-    model_config = ConfigDict(
-        populate_by_name=True,
-        arbitrary_types_allowed=True,
-        json_encoders={ObjectId: str}
-    )
+    class Config:
+        arbitrary_types_allowed = True
+        json_encoders = {ObjectId: str}
         
     @property
     def str_id(self) -> str:
@@ -56,9 +53,8 @@ class User(BaseModel):
     preferred_language: str = "en"
     subscription_status: str = "free"
 
-    model_config = ConfigDict(
-        from_attributes=True
-    )
+    class Config:
+        orm_mode = True
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
@@ -68,4 +64,4 @@ class UserUpdate(BaseModel):
 
 class UserInResponse(BaseModel):
     user: User
-    token: str 
+    token: str

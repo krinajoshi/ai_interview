@@ -1,75 +1,49 @@
-import { Answer, AIAnalysisResult } from '../types/interview';
-
-export const calculateAnswerScore = async (
-  answer: Answer,
-  analysis: AIAnalysisResult,
-  language: string
-): Promise<{ score: number; comments: string[]; suggestions: string[] }> => {
-  let score = 0;
-  const comments: string[] = [];
-  const suggestions: string[] = [];
-
-  // Word count analysis (0-3 points)
-  const wordCount = answer.text.split(/\s+/).length;
-  if (wordCount > 200) {
-    score += 3;
-    comments.push(
-      language === 'fr' ? 'Réponse très détaillée et complète' :
-      language === 'ar' ? 'إجابة مفصلة وشاملة للغاية' :
-      'Very detailed and comprehensive answer'
+/**
+ * Calculate a score for an answer based on various metrics
+ * 
+ * @param text The text of the answer
+ * @param expectedKeywords Array of keywords that should be present in a good answer
+ * @param minLength Minimum expected length of a good answer
+ * @returns Score between 0 and 1
+ */
+export const calculateAnswerScore = (
+  text: string,
+  expectedKeywords: string[] = [],
+  minLength: number = 50
+): number => {
+  if (!text) return 0;
+  
+  // Calculate length score (0-0.3)
+  const lengthScore = Math.min(text.length / minLength, 1) * 0.3;
+  
+  // Calculate keyword score (0-0.5)
+  let keywordScore = 0;
+  if (expectedKeywords.length > 0) {
+    const lowerText = text.toLowerCase();
+    const matchedKeywords = expectedKeywords.filter(keyword => 
+      lowerText.includes(keyword.toLowerCase())
     );
-  } else if (wordCount > 100) {
-    score += 2;
-    comments.push(
-      language === 'fr' ? 'Bonne longueur de réponse' :
-      language === 'ar' ? 'طول جيد للإجابة' :
-      'Good answer length'
-    );
-  } else if (wordCount > 50) {
-    score += 1;
-    comments.push(
-      language === 'fr' ? 'Réponse acceptable mais pourrait être plus détaillée' :
-      language === 'ar' ? 'إجابة مقبولة ولكن يمكن أن تكون أكثر تفصيلاً' :
-      'Acceptable answer but could be more detailed'
-    );
+    keywordScore = (matchedKeywords.length / expectedKeywords.length) * 0.5;
   } else {
-    suggestions.push(
-      language === 'fr' ? 'Essayez de fournir plus de détails dans votre réponse' :
-      language === 'ar' ? 'حاول تقديم المزيد من التفاصيل في إجابتك' :
-      'Try to provide more details in your answer'
-    );
+    // If no keywords provided, give a default score
+    keywordScore = 0.3;
   }
+  
+  // Calculate structure score (0-0.2)
+  // Simple heuristic: sentences with proper punctuation
+  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+  const structureScore = Math.min(sentences.length / 3, 1) * 0.2;
+  
+  // Combine scores
+  return lengthScore + keywordScore + structureScore;
+};
 
-  // Content quality (0-4 points)
-  if (analysis.score >= 4) {
-    score += 4;
-    comments.push(
-      language === 'fr' ? 'Excellente qualité de réponse' :
-      language === 'ar' ? 'جودة إجابة ممتازة' :
-      'Excellent answer quality'
-    );
-  } else if (analysis.score >= 3) {
-    score += 3;
-    comments.push(
-      language === 'fr' ? 'Bonne qualité de réponse' :
-      language === 'ar' ? 'جودة إجابة جيدة' :
-      'Good answer quality'
-    );
-  } else if (analysis.score >= 2) {
-    score += 2;
-    comments.push(
-      language === 'fr' ? 'Qualité de réponse acceptable' :
-      language === 'ar' ? 'جودة إجابة مقبولة' :
-      'Acceptable answer quality'
-    );
-  } else {
-    score += 1;
-    suggestions.push(
-      language === 'fr' ? 'Améliorez la qualité de votre réponse' :
-      language === 'ar' ? 'حسن جودة إجابتك' :
-      'Improve your answer quality'
-    );
-  }
-
-  return { score, comments, suggestions };
-}; 
+/**
+ * Format a score as a percentage
+ * 
+ * @param score Score between 0 and 1
+ * @returns Formatted percentage string
+ */
+export const formatScoreAsPercentage = (score: number): string => {
+  return `${Math.round(score * 100)}%`;
+};

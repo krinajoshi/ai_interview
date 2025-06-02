@@ -1,65 +1,112 @@
 {
   "common": {
-    "welcome": "Bienvenue sur la plateforme d'entretien IA",
-    "login": "Connexion",
-    "register": "S'inscrire",
-    "logout": "Déconnexion",
-    "profile": "Profil",
-    "dashboard": "Tableau de bord",
-    "interview": "Entretien",
-    "analytics": "Analyses",
-    "settings": "Paramètres"
+    "loading": "Chargement...",
+    "error": "Une erreur est survenue",
+    "success": "Succès !",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "view": "Voir",
+    "back": "Retour",
+    "next": "Suivant",
+    "previous": "Précédent",
+    "finish": "Terminer"
   },
   "auth": {
+    "login": "Connexion",
+    "register": "Inscription",
+    "logout": "Déconnexion",
     "email": "Email",
     "password": "Mot de passe",
     "confirmPassword": "Confirmer le mot de passe",
+    "name": "Nom",
     "forgotPassword": "Mot de passe oublié ?",
     "noAccount": "Vous n'avez pas de compte ?",
     "haveAccount": "Vous avez déjà un compte ?",
     "signUp": "S'inscrire",
     "signIn": "Se connecter"
   },
-  "interview": {
-    "start": "Commencer l'entretien",
-    "end": "Terminer l'entretien",
-    "pause": "Pause",
-    "resume": "Reprendre",
-    "stop": "Arrêter",
-    "next": "Question suivante",
-    "previous": "Question précédente",
-    "submit": "Soumettre la réponse",
-    "feedback": "Voir les commentaires"
+  "nav": {
+    "home": "Accueil",
+    "dashboard": "Tableau de bord",
+    "interview": "Entretien",
+    "profile": "Profil",
+    "analytics": "Analyses"
+  },
+  "home": {
+    "title": "Préparation d'entretien IA",
+    "subtitle": "Pratiquez des entretiens en plusieurs langues avec des retours d'IA",
+    "getStarted": "Commencer",
+    "learnMore": "En savoir plus"
   },
   "dashboard": {
-    "upcomingInterviews": "Entretiens à venir",
-    "pastInterviews": "Entretiens passés",
-    "performance": "Aperçu des performances",
-    "skills": "Évaluation des compétences",
-    "recommendations": "Recommandations"
+    "title": "Tableau de bord",
+    "recentInterviews": "Entretiens récents",
+    "statistics": "Statistiques",
+    "completedInterviews": "Entretiens terminés",
+    "averageScore": "Score moyen",
+    "questionsAnswered": "Questions répondues",
+    "startNewInterview": "Nouvel entretien",
+    "noInterviews": "Vous n'avez pas encore effectué d'entretien.",
+    "startFirst": "Commencer votre premier entretien"
+  },
+  "interview": {
+    "setup": {
+      "title": "Configuration de l'entretien",
+      "jobTitle": "Titre du poste",
+      "jobDescription": "Description du poste",
+      "jobDescriptionHelp": "Collez la description du poste ici pour générer des questions plus pertinentes.",
+      "requiredInfo": "Informations requises",
+      "optionalInfo": "Informations optionnelles",
+      "uploadResume": "Télécharger le CV",
+      "fileSelected": "Fichier sélectionné",
+      "startInterview": "Commencer l'entretien",
+      "generatingQuestions": "Génération des questions..."
+    },
+    "session": {
+      "questions": "Questions d'entretien",
+      "answerWith": "Répondez avec du texte, de l'audio ou de la vidéo :",
+      "typeAnswer": "Tapez votre réponse ici...",
+      "recording": "Enregistrement",
+      "recorded": "enregistré",
+      "context": "Contexte :"
+    },
+    "completion": {
+      "title": "Entretien terminé !",
+      "thankYou": "Merci d'avoir terminé l'entretien. Vos réponses ont été enregistrées et analysées.",
+      "redirecting": "Redirection vers le tableau de bord..."
+    }
+  },
+  "analytics": {
+    "title": "Analyse de l'entretien",
+    "summary": "Résumé de l'entretien",
+    "overallScore": "Score global",
+    "technicalScore": "Score technique",
+    "communicationScore": "Score de communication",
+    "strengths": "Points forts",
+    "weaknesses": "Points à améliorer",
+    "question": "Question",
+    "yourAnswer": "Votre réponse",
+    "feedback": "Commentaires",
+    "keywords": "Mots-clés",
+    "keywordsFound": "Mots-clés trouvés :",
+    "keywordsMissing": "Mots-clés manquants :",
+    "noKeywordsFound": "Aucun mot-clé trouvé",
+    "allKeywordsFound": "Tous les mots-clés attendus ont été mentionnés"
   },
   "profile": {
+    "title": "Profil",
     "personalInfo": "Informations personnelles",
     "updateProfile": "Mettre à jour le profil",
     "changePassword": "Changer le mot de passe",
-    "experience": "Expérience",
-    "education": "Formation",
-    "skills": "Compétences",
-    "resume": "CV",
-    "uploadResume": "Télécharger le CV"
+    "language": "Langue préférée",
+    "deleteAccount": "Supprimer le compte",
+    "deleteWarning": "Cette action ne peut pas être annulée. Toutes vos données seront définitivement supprimées."
   },
-  "analytics": {
-    "overview": "Aperçu des analyses",
-    "technicalScore": "Score technique",
-    "communicationScore": "Score de communication",
-    "progress": "Progrès dans le temps",
-    "improvement": "Axes d'amélioration"
-  },
-  "errors": {
-    "required": "Ce champ est obligatoire",
-    "invalidEmail": "Adresse email invalide",
-    "passwordMismatch": "Les mots de passe ne correspondent pas",
-    "serverError": "Erreur serveur survenue",
-    "networkError": "Erreur réseau survenue"
+  "setup": {
+    "jobTitle": "Titre du poste",
+    "jobDescription": "Description du poste",
+    "jobDescriptionHelp": "Collez la description du poste ici pour générer des questions plus pertinentes."
   }
-} 
+}
