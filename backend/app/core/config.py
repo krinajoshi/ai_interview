@@ -7,7 +7,12 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     
     # CORS
-    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
+    BACKEND_CORS_ORIGINS: List[str] = [
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "https://ai-interview-vxe9.onrender.com",
+        "https://ai-interview-img6.onrender.com"
+    ]
     
     # JWT
     SECRET_KEY: str = os.getenv("SECRET_KEY", "supersecretkey")
