@@ -251,7 +251,51 @@ TRANSLATIONS = {
     }
 }
 
-def translate_question(question: str, language: str) -> str:
+async def translate_text(text: str, target_language: str) -> str:
+    """Translate text using HuggingFace's free translation API"""
+    try:
+        import requests
+        from ..core.config import settings
+        
+        # Map language codes
+        language_map = {
+            "fr": "fr_XX",
+            "ar": "ar_AR",
+            "en": "en_XX"
+        }
+        
+        # Get the target language code
+        target_code = language_map.get(target_language, "en_XX")
+        
+        # Use HuggingFace's free translation API
+        API_URL = "https://api-inference.huggingface.co/models/Helsinki-NLP/opus-mt-en-fr"
+        if target_language == "ar":
+            API_URL = "https://api-inference.huggingface.co/models/Helsinki-NLP/opus-mt-en-ar"
+        
+        headers = {
+            "Authorization": f"Bearer {settings.HUGGINGFACE_API_TOKEN}"
+        }
+        
+        response = requests.post(
+            API_URL,
+            headers=headers,
+            json={"inputs": text}
+        )
+        
+        if response.status_code != 200:
+            logger.error(f"Translation API error: {response.status_code} - {response.text}")
+            return text  # Return original text if translation fails
+            
+        result = response.json()
+        if isinstance(result, list) and len(result) > 0:
+            return result[0]["translation_text"]
+        return text
+        
+    except Exception as e:
+        logger.error(f"Translation error: {str(e)}")
+        return text
+
+async def translate_question(question: str, language: str) -> str:
     """Translate a question to the target language"""
     if language == "en":
         return question
@@ -264,31 +308,8 @@ def translate_question(question: str, language: str) -> str:
         elif language == "ar" and index < len(AR_BEHAVIORAL_TEMPLATES):
             return AR_BEHAVIORAL_TEMPLATES[index]
     
-    # For technical questions, use a simple translation approach
-    # In a real app, you would use a translation service
-    if language == "fr":
-        # Simple French translation rules
-        translated = question
-        translated = translated.replace("What", "Quelles").replace("what", "quelles")
-        translated = translated.replace("How do you", "Comment")
-        translated = translated.replace("Describe", "Décrivez")
-        translated = translated.replace("Tell me about", "Parlez-moi de")
-        translated = translated.replace("experience", "expérience")
-        translated = translated.replace("project", "projet")
-        return translated
-    
-    elif language == "ar":
-        # Simple Arabic translation rules
-        translated = question
-        translated = translated.replace("What", "ما هي").replace("what", "ما هي")
-        translated = translated.replace("How do you", "كيف")
-        translated = translated.replace("Describe", "صف")
-        translated = translated.replace("Tell me about", "أخبرني عن")
-        translated = translated.replace("experience", "خبرة")
-        translated = translated.replace("project", "مشروع")
-        return translated
-    
-    return question
+    # Use AI translation for technical questions
+    return await translate_text(question, language)
 
 def format_question(template: str, job_title: str) -> str:
     """Format a question template with job-specific parameters"""
@@ -373,9 +394,9 @@ async def generate_questions(job_title: str, job_description: str = None, langua
         
         # Translate questions
         texts = {
-            "en": text if language == "en" else translate_question(text, "en"),
-            "fr": translate_question(text, "fr"),
-            "ar": translate_question(text, "ar")
+            "en": text if language == "en" else await translate_question(text, "en"),
+            "fr": await translate_question(text, "fr"),
+            "ar": await translate_question(text, "ar")
         }
         
         questions.append({
@@ -565,10 +586,6 @@ async def analyze_facial_metrics(video_data: bytes) -> Dict:
             "thoughtful": 0.2
         }
     }
-
-async def translate_text(text: str, target_language: str) -> str:
-    """Mock text translation"""
-    return f"Translated: {text}"
 
 async def transcribe_audio_huggingface(audio_file_path: str) -> str:
     """Transcribe audio using AssemblyAI's speech-to-text service"""
