@@ -9,6 +9,8 @@ An AI-powered multilingual interview preparation platform that helps non-native 
 - **Multi-format response options** (text, audio, video)
 - **AI-powered feedback** covering content quality, language proficiency, and cultural communication norms
 - **Accessible web-based platform** requiring no downloads
+- **Real-time audio transcription** using AssemblyAI
+- **Advanced translation** using HuggingFace's translation models
 
 ## Tech Stack
 
@@ -22,11 +24,12 @@ An AI-powered multilingual interview preparation platform that helps non-native 
 - FastAPI (Python)
 - MongoDB for data storage
 - JWT authentication
-- AI services integration (OpenAI, Cohere, Hugging Face)
+- AI services integration (Cohere, Hugging Face, AssemblyAI)
 
 ### AI Services
 - Question Generation: Local AI models (Hugging Face)
-- Speech-to-Text: OpenAI Whisper API
+- Speech-to-Text: AssemblyAI API
+- Translation: HuggingFace Translation API
 - Feedback Analysis: Cohere AI
 
 ## Getting Started
@@ -58,7 +61,10 @@ An AI-powered multilingual interview preparation platform that helps non-native 
    ```
    cp .env.example .env
    ```
-   Edit the `.env` file with your configuration.
+   Edit the `.env` file with your configuration. You'll need to add:
+   - `ASSEMBLY_AI_API_KEY`: Your AssemblyAI API key for transcription
+   - `HUGGINGFACE_API_TOKEN`: Your HuggingFace API token for translation
+   - `COHERE_API_KEY`: Your Cohere API key for feedback analysis
 
 5. Run the server:
    ```
@@ -115,12 +121,28 @@ ai_interview/
 └── README.md              # Project documentation
 ```
 
+## API Integration
+
+### AssemblyAI Integration
+The app uses AssemblyAI for high-quality audio transcription. The service provides:
+- Real-time transcription
+- Support for multiple audio formats
+- Automatic punctuation and formatting
+- Language detection and support
+
+### HuggingFace Translation
+The translation system uses HuggingFace's translation models:
+- English to French translation
+- English to Arabic translation
+- High-quality, context-aware translations
+- Support for technical and domain-specific terms
+
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Acknowledgments
 
-- OpenAI for AI capabilities
+- AssemblyAI for speech-to-text capabilities
+- HuggingFace for translation models
 - Cohere for sentiment analysis
-- Hugging Face for open-source models
