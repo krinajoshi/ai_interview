@@ -571,18 +571,94 @@ async def translate_text(text: str, target_language: str) -> str:
     return f"Translated: {text}"
 
 async def transcribe_audio_huggingface(audio_file_path: str) -> str:
-    """Mock audio transcription"""
+    """Transcribe audio using AssemblyAI's speech-to-text service"""
     try:
-        # In a real implementation, this would call a transcription service
-        # For now, return a mock transcription based on the file path
-        if "product" in audio_file_path.lower():
-            return "As a product manager, I prioritize features based on user needs, business impact, and technical feasibility. I use frameworks like RICE scoring to evaluate and rank features objectively."
-        elif "software" in audio_file_path.lower() or "engineer" in audio_file_path.lower():
-            return "In my experience as a software engineer, I've worked with various technologies including Python, JavaScript, and cloud platforms. I focus on writing clean, maintainable code and follow best practices."
-        elif "leadership" in audio_file_path.lower():
-            return "I demonstrated leadership skills when I led a cross-functional team to deliver a critical project under tight deadlines. I ensured clear communication and helped team members overcome obstacles."
+        import requests
+        from ..core.config import settings
+        import tempfile
+        import os
+        
+        # Check if we have the API token
+        if not settings.ASSEMBLY_AI_API_KEY:
+            logger.error("ASSEMBLY_AI_API_KEY not configured")
+            raise ValueError("AssemblyAI API key not configured")
+            
+        # Handle blob URLs by downloading the audio data
+        if audio_file_path.startswith('blob:'):
+            # Download the audio data from the blob URL
+            response = requests.get(audio_file_path)
+            if response.status_code != 200:
+                raise Exception(f"Failed to download audio from blob URL: {response.status_code}")
+            audio_data = response.content
         else:
-            return "This is a mock transcription of the audio. For this question, I would approach it by considering all relevant factors and drawing on my past experience to provide the best solution."
+            # Read from local file
+            with open(audio_file_path, 'rb') as audio_file:
+                audio_data = audio_file.read()
+            
+        # First, upload the audio file to AssemblyAI
+        upload_url = "https://api.assemblyai.com/v2/upload"
+        headers = {
+            "authorization": settings.ASSEMBLY_AI_API_KEY
+        }
+        
+        upload_response = requests.post(
+            upload_url,
+            headers=headers,
+            data=audio_data
+        )
+        
+        if upload_response.status_code != 200:
+            logger.error(f"AssemblyAI upload error: {upload_response.status_code} - {upload_response.text}")
+            raise Exception(f"Audio upload failed with status {upload_response.status_code}")
+            
+        # Get the audio URL from the upload response
+        audio_url = upload_response.json()["upload_url"]
+        
+        # Submit the transcription request
+        transcript_url = "https://api.assemblyai.com/v2/transcript"
+        transcript_request = {
+            "audio_url": audio_url,
+            "language_code": "en",  # You can make this configurable based on user's language
+            "punctuate": True,
+            "format_text": True
+        }
+        
+        transcript_response = requests.post(
+            transcript_url,
+            json=transcript_request,
+            headers=headers
+        )
+        
+        if transcript_response.status_code != 200:
+            logger.error(f"AssemblyAI transcription error: {transcript_response.status_code} - {transcript_response.text}")
+            raise Exception(f"Transcription request failed with status {transcript_response.status_code}")
+            
+        # Get the transcript ID
+        transcript_id = transcript_response.json()["id"]
+        
+        # Poll for the transcription result
+        while True:
+            polling_response = requests.get(
+                f"{transcript_url}/{transcript_id}",
+                headers=headers
+            )
+            
+            if polling_response.status_code != 200:
+                logger.error(f"AssemblyAI polling error: {polling_response.status_code} - {polling_response.text}")
+                raise Exception(f"Failed to get transcription status: {polling_response.status_code}")
+                
+            status = polling_response.json()["status"]
+            
+            if status == "completed":
+                return polling_response.json()["text"]
+            elif status == "error":
+                error = polling_response.json().get("error", "Unknown error")
+                raise Exception(f"Transcription failed: {error}")
+            
+            # Wait for 1 second before polling again
+            import time
+            time.sleep(1)
+            
     except Exception as e:
         logger.error(f"Transcription error: {str(e)}")
-        return "This is a mock transcription of the audio file."
+        raise Exception(f"Failed to transcribe audio: {str(e)}")

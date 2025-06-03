@@ -92,17 +92,23 @@ export const transcribeMedia = async (
       throw new Error('Not authenticated');
     }
 
+    // Fetch the actual media data from the blob URL
+    const mediaResponse = await fetch(mediaUrl);
+    const mediaBlob = await mediaResponse.blob();
+
+    // Create form data to send the file
+    const formData = new FormData();
+    formData.append('file', mediaBlob, `recording.${mediaType === 'audio' ? 'wav' : 'mp4'}`);
+    formData.append('mediaType', mediaType);
+
     // Make API call to transcribe media
     const response = await axios.post(
       `${API_URL}/api/v1/transcription`,
-      {
-        mediaUrl,
-        mediaType
-      },
+      formData,
       {
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data'
         }
       }
     );
