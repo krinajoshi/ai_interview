@@ -11,7 +11,10 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "http://localhost:8000",
         "https://ai-interview-vxe9.onrender.com",
-        "https://ai-interview-img6.onrender.com"
+        "https://ai-interview-img6.onrender.com",
+        "https://*.onrender.com",  # Allow all subdomains on render.com
+        "http://localhost:*",      # Allow all localhost ports
+        "*"                        # Allow all origins (temporary for testing)
     ]
     
     # JWT
